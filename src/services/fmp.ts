@@ -117,6 +117,11 @@ interface FMPCashFlowStatement {
     depreciationAndAmortization: number
     changeInWorkingCapital: number
     stockBasedCompensation: number
+    // 经营性 WC 分项 (用于计算精确的经营性净营运资本变动)
+    changeInAccountReceivables: number
+    changeInInventory: number
+    changeInAccountPayables: number
+    changeInOtherWorkingCapital: number
 }
 
 interface FMPBalanceSheet {
@@ -417,15 +422,26 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
             historicalCapexPercent = annualCapex / annualRevenue
 
             // WC Change as % of Revenue (use average if multiple years)
+            // 使用经营性 WC 分项: ΔAR + ΔInventory - ΔAP + ΔOther WC
+            // 这排除了现金和短期债务的变动，保持与 WACC 折现的一致性
             if (cashFlowAnnualData.length >= 2 && incomeAnnualData.length >= 2) {
                 const prevRevenue = toNum(incomeAnnualData[1].revenue) * exchangeRate
                 const revenueChange = annualRevenue - prevRevenue
-                const wcChange = toNum(latestCF.changeInWorkingCapital) * exchangeRate
+
+                // 经营性净营运资本变动 (Operating Working Capital Change)
+                // 注意: FMP 中 changeInAccountReceivables/changeInInventory 为正表示现金流出
+                // changeInAccountPayables 为正表示现金流入，所以需要取反
+                const opWCChange = (
+                    toNum(latestCF.changeInAccountReceivables) +
+                    toNum(latestCF.changeInInventory) -
+                    toNum(latestCF.changeInAccountPayables) +
+                    toNum(latestCF.changeInOtherWorkingCapital)
+                ) * exchangeRate
 
                 if (Math.abs(revenueChange) > 0) {
-                    historicalWCChangePercent = wcChange / revenueChange
+                    historicalWCChangePercent = opWCChange / revenueChange
                     // Clamp to reasonable range
-                    historicalWCChangePercent = Math.max(-0.1, Math.min(0.1, historicalWCChangePercent))
+                    historicalWCChangePercent = Math.max(-0.15, Math.min(0.15, historicalWCChangePercent))
                 }
             }
         }

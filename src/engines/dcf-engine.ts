@@ -82,28 +82,59 @@ export function calculateDCF(
             break
 
         case 'fade':
-            // Fade model - excess returns decay over fadeYears
+            // Fade Model: 从高增长/高ROIC 渐退到稳态
+            // 设定：从显式期末开始，渐退到 ROIC_end 和 g_end
             let fadePV = 0
             let fadeNopat = lastProjection.nopat
-            const excessROIC = inputs.steadyStateROIC - inputs.wacc
+
+            // 起始和结束参数
+            const gStart = inputs.fadeStartGrowth       // 渐退期起始增长率
+            const gEnd = inputs.terminalGrowthRate      // 永续增长率
+            const roicStart = inputs.fadeStartROIC      // 渐退期起始 ROIC
+            const roicEnd = inputs.steadyStateROIC      // 稳态 ROIC
 
             for (let y = 1; y <= inputs.fadeYears; y++) {
-                // Decay excess ROIC linearly
-                const yearROIC = inputs.steadyStateROIC - (excessROIC * y / inputs.fadeYears)
-                const yearGrowth = inputs.terminalGrowthRate * (1 - y / inputs.fadeYears)
+                // 线性渐退因子：从 1 渐退到 0
+                const fadeFactor = 1 - y / inputs.fadeYears
 
+                // 当年增长率：从 gStart 渐退到 gEnd
+                const yearGrowth = gEnd + (gStart - gEnd) * fadeFactor
+
+                // 当年 ROIC：从 roicStart 渐退到 roicEnd  
+                const yearROIC = roicEnd + (roicStart - roicEnd) * fadeFactor
+
+                // 再投资率 = g / ROIC (确保 ROIC > 0)
+                const yearReinvestment = yearROIC > 0.001
+                    ? yearGrowth / yearROIC
+                    : 0
+
+                // NOPAT 增长
                 fadeNopat = fadeNopat * (1 + yearGrowth)
-                const yearReinvestment = yearGrowth / Math.max(yearROIC, 0.01)
+
+                // FCF = NOPAT × (1 - 再投资率)
                 const yearFCF = fadeNopat * (1 - yearReinvestment)
 
+                // 折现累加
                 fadePV += yearFCF / Math.pow(1 + inputs.wacc, inputs.explicitPeriodYears + y)
             }
 
-            // After fade, perpetuity at WACC (no excess returns)
-            const postFadeNopat = fadeNopat * (1 + inputs.terminalGrowthRate)
-            const postFadeTV = postFadeNopat / (inputs.wacc - inputs.terminalGrowthRate)
+            // 渐退期结束后：永久稳态
+            // NOPAT_{T+1} = NOPAT_T × (1 + g_end)
+            const postFadeNopat = fadeNopat * (1 + gEnd)
+
+            // 稳态再投资率 = g_end / ROIC_end
+            const postFadeReinvestment = roicEnd > 0.001 ? gEnd / roicEnd : 0
+
+            // 稳态 FCF = NOPAT × (1 - 再投资率)
+            const postFadeFCF = postFadeNopat * (1 - postFadeReinvestment)
+
+            // 终值 = 稳态 FCF / (WACC - g_end)
+            const postFadeTV = postFadeFCF / (inputs.wacc - gEnd)
+
+            // 折现到渐退期末（T = n + fadeYears）
             const postFadePV = postFadeTV / Math.pow(1 + inputs.wacc, inputs.explicitPeriodYears + inputs.fadeYears)
 
+            // 终值 = 渐退期现值 + 渐退后终值现值（还原到期末时点用于统一计算）
             terminalValue = (fadePV + postFadePV) * Math.pow(1 + inputs.wacc, inputs.explicitPeriodYears)
             break
 

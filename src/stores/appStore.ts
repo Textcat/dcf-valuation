@@ -68,9 +68,11 @@ function createDefaultDCFInputs(symbol: string, baseRevenue: number, baseNetInco
         explicitPeriodYears: 5,
         drivers: Array(5).fill(null).map(() => createDefaultDrivers()),
         terminalMethod: 'perpetuity',
-        terminalGrowthRate: 0.03,
-        steadyStateROIC: 0.12,
+        terminalGrowthRate: 0.03,        // g_end: 永续增长率
+        steadyStateROIC: 0.12,           // ROIC_end: 稳态 ROIC
         fadeYears: 10,
+        fadeStartGrowth: 0.10,           // g_start: 渐退期起始增长率 (将被实际数据覆盖)
+        fadeStartROIC: 0.20,             // ROIC_start: 渐退期起始 ROIC (将被实际数据覆盖)
         wacc: 0.10,
         baseRevenue,
         baseNetIncome
@@ -167,8 +169,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
                     dcfInputs.drivers[2].revenueGrowth = growth * 0.8
                     dcfInputs.drivers[3].revenueGrowth = growth * 0.7
                     dcfInputs.drivers[4].revenueGrowth = growth * 0.6
+
+                    // Fade Model: 起始增长率 = 显式期最后一年增长率
+                    dcfInputs.fadeStartGrowth = growth * 0.6
                 }
             }
+
+            // Fade Model: 起始 ROIC = 历史 ROIC（当前竞争优势水平）
+            dcfInputs.fadeStartROIC = data.historicalROIC
 
             set({
                 currentSymbol: symbol.toUpperCase(),

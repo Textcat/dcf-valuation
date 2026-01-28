@@ -112,9 +112,11 @@ export interface DCFInputs {
 
     // Terminal Value
     terminalMethod: 'perpetuity' | 'roic-driven' | 'fade'
-    terminalGrowthRate: number
-    steadyStateROIC: number
-    fadeYears: number
+    terminalGrowthRate: number      // g_end: 永续增长率 (长期 GDP 增速)
+    steadyStateROIC: number         // ROIC_end: 稳态 ROIC (竞争优势消失后)
+    fadeYears: number               // 渐退年数
+    fadeStartGrowth: number         // g_start: 渐退期起始增长率
+    fadeStartROIC: number           // ROIC_start: 渐退期起始 ROIC
 
     // Discount Rate
     wacc: number
