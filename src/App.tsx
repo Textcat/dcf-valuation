@@ -1,0 +1,136 @@
+/**
+ * Main App Component
+ */
+
+import { TickerSearch } from '@/components/TickerSearch'
+import { FinancialOverview } from '@/components/FinancialOverview'
+import { DCFInputPanel } from '@/components/DCFInputPanel'
+import { ValidationDashboard } from '@/components/ValidationDashboard'
+import { useAppStore } from '@/stores/appStore'
+
+function App() {
+    const {
+        currentSymbol,
+        financialData,
+        isLoading,
+        error,
+        clearError,
+        activeTab,
+        setActiveTab
+    } = useAppStore()
+
+    return (
+        <div className="min-h-screen p-6 md:p-10">
+            {/* Header */}
+            <header className="max-w-6xl mx-auto mb-8">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <h1 className="text-3xl md:text-4xl font-bold gradient-text">
+                            DCF Validation Framework
+                        </h1>
+                        <p className="text-slate-400 mt-1">
+                            三层验证闭环 · 快速可检验的估值系统
+                        </p>
+                    </div>
+                    <TickerSearch />
+                </div>
+            </header>
+
+            {/* Error Alert */}
+            {error && (
+                <div className="max-w-6xl mx-auto mb-6">
+                    <div className="bg-red-900/30 border border-red-600/50 text-red-300 px-4 py-3 rounded-xl flex justify-between items-center">
+                        <span>{error}</span>
+                        <button
+                            onClick={clearError}
+                            className="text-red-400 hover:text-red-300"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Loading State */}
+            {isLoading && (
+                <div className="max-w-6xl mx-auto">
+                    <div className="glass-card p-12 text-center">
+                        <div className="inline-block w-12 h-12 border-4 border-blue-400 border-t-transparent rounded-full animate-spin mb-4" />
+                        <p className="text-slate-300">正在加载财务数据...</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Main Content */}
+            {!isLoading && financialData && (
+                <main className="max-w-6xl mx-auto space-y-6">
+                    {/* Financial Overview */}
+                    <FinancialOverview />
+
+                    {/* Tab Navigation */}
+                    <div className="flex gap-6 border-b border-slate-700/50 pb-0">
+                        <button
+                            onClick={() => setActiveTab('input')}
+                            className={`tab-button px-1 py-3 text-sm font-medium transition-colors
+                ${activeTab === 'input'
+                                    ? 'text-white active'
+                                    : 'text-slate-400 hover:text-slate-200'
+                                }`}
+                        >
+                            DCF 参数
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('validation')}
+                            className={`tab-button px-1 py-3 text-sm font-medium transition-colors
+                ${activeTab === 'validation'
+                                    ? 'text-white active'
+                                    : 'text-slate-400 hover:text-slate-200'
+                                }`}
+                        >
+                            验证结果
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('monte-carlo')}
+                            className={`tab-button px-1 py-3 text-sm font-medium transition-colors
+                ${activeTab === 'monte-carlo'
+                                    ? 'text-white active'
+                                    : 'text-slate-400 hover:text-slate-200'
+                                }`}
+                        >
+                            Monte Carlo
+                        </button>
+                    </div>
+
+                    {/* Tab Content */}
+                    {activeTab === 'input' && <DCFInputPanel />}
+                    {activeTab === 'validation' && <ValidationDashboard />}
+                    {activeTab === 'monte-carlo' && (
+                        <div className="glass-card p-6 text-center text-slate-400">
+                            Monte Carlo 模拟功能即将推出...
+                        </div>
+                    )}
+                </main>
+            )}
+
+            {/* Empty State */}
+            {!isLoading && !financialData && !error && (
+                <div className="max-w-6xl mx-auto">
+                    <div className="glass-card p-12 text-center">
+                        <div className="text-6xl mb-4">📊</div>
+                        <h2 className="text-2xl font-bold text-white mb-2">开始分析</h2>
+                        <p className="text-slate-400 max-w-md mx-auto">
+                            输入股票代码以加载财务数据，构建三层可验证的 DCF 估值模型
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Footer */}
+            <footer className="max-w-6xl mx-auto mt-12 pt-6 border-t border-slate-800 text-center text-sm text-slate-500">
+                <p>DCF Validation Framework · 数据来源: Financial Modeling Prep</p>
+            </footer>
+        </div>
+    )
+}
+
+export default App
