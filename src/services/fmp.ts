@@ -100,6 +100,7 @@ interface FMPProfile {
 interface FMPIncomeStatement {
     date: string
     symbol: string
+    reportedCurrency: string   // 财报实际使用的货币（可能与 profile.currency 不同）
     revenue: number
     grossProfit: number
     operatingIncome: number
@@ -177,23 +178,44 @@ interface FMPQuote {
 async function fetchExchangeRate(currency: string): Promise<number> {
     if (currency === 'USD') return 1
 
-    // Try to get forex quote
-    const url = buildUrl('quote', { symbol: `${currency}USD` })
-    const data = await fetchAndValidate<FMPQuote[]>(url)
-
-    if (data && data.length > 0 && data[0].price > 0) {
-        return data[0].price
+    // Use free exchangerate-api.com as primary source
+    // Returns: 1 unit of source currency = X USD
+    try {
+        const res = await fetch(`https://api.exchangerate-api.com/v4/latest/USD`)
+        if (res.ok) {
+            const data = await res.json()
+            if (data.rates && data.rates[currency]) {
+                // The API gives USD base, so 1 USD = X currency
+                // We need: 1 currency = Y USD, so Y = 1 / X
+                return 1 / data.rates[currency]
+            }
+        }
+    } catch (err) {
+        console.warn(`Failed to fetch exchange rate from exchangerate-api:`, err)
     }
 
-    // Try reverse
-    const reverseUrl = buildUrl('quote', { symbol: `USD${currency}` })
-    const reverseData = await fetchAndValidate<FMPQuote[]>(reverseUrl)
-
-    if (reverseData && reverseData.length > 0 && reverseData[0].price > 0) {
-        return 1 / reverseData[0].price
+    // Fallback: common currency hardcoded rates (approximate)
+    const fallbackRates: Record<string, number> = {
+        'TWD': 0.032,   // 1 TWD ≈ 0.032 USD
+        'EUR': 1.08,    // 1 EUR ≈ 1.08 USD
+        'GBP': 1.27,    // 1 GBP ≈ 1.27 USD
+        'JPY': 0.0067,  // 1 JPY ≈ 0.0067 USD
+        'CNY': 0.14,    // 1 CNY ≈ 0.14 USD
+        'HKD': 0.128,   // 1 HKD ≈ 0.128 USD
+        'KRW': 0.00075, // 1 KRW ≈ 0.00075 USD
+        'INR': 0.012,   // 1 INR ≈ 0.012 USD
+        'AUD': 0.65,    // 1 AUD ≈ 0.65 USD
+        'CAD': 0.74,    // 1 CAD ≈ 0.74 USD
+        'CHF': 1.13,    // 1 CHF ≈ 1.13 USD
+        'SGD': 0.75,    // 1 SGD ≈ 0.75 USD
     }
 
-    console.warn(`Could not fetch exchange rate for ${currency}, using 1`)
+    if (fallbackRates[currency]) {
+        console.log(`Using fallback exchange rate for ${currency}: ${fallbackRates[currency]}`)
+        return fallbackRates[currency]
+    }
+
+    console.warn(`Unknown currency ${currency}, using 1 (may cause incorrect display)`)
     return 1
 }
 
@@ -316,7 +338,6 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
     }
 
     const profile = profileData[0]
-    const exchangeRate = await fetchExchangeRate(profile.currency)
     const beta = toNum(profile.beta) || 1.0 // Default beta = 1 if not available
 
     // Parallel fetch all data
@@ -380,6 +401,13 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
             ttmSBC += toNum(q.stockBasedCompensation)
         }
     }
+
+    // 使用财报的 reportedCurrency 获取汇率（而非 profile.currency）
+    // 这修复了 ADR 股票（如 TSM）的货币单位不一致问题：
+    // - profile.currency = "USD" (ADR 交易货币)
+    // - reportedCurrency = "TWD" (财报实际货币)
+    const reportedCurrency = incomeQuarterlyData?.[0]?.reportedCurrency || profile.currency
+    const exchangeRate = await fetchExchangeRate(reportedCurrency)
 
     // Apply exchange rate
     ttmRevenue *= exchangeRate
@@ -536,9 +564,11 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
 
     const pegHistory = peHistory.map(pe => pe / 10)
 
-    // Current valuation metrics
-    const currentPrice = toNum(profile.price) * exchangeRate
-    const marketCap = toNum(profile.marketCap) * exchangeRate
+    // 股价和市值使用交易货币的汇率（对于 ADR 如 TSM，profile.currency = USD）
+    // 这与财报货币（reportedCurrency = TWD）不同
+    const priceExchangeRate = await fetchExchangeRate(profile.currency)
+    const currentPrice = toNum(profile.price) * priceExchangeRate
+    const marketCap = toNum(profile.marketCap) * priceExchangeRate
     const currentPE = ttmEPS > 0 ? currentPrice / ttmEPS : 0
     const currentPFCF = ttmFCF > 0 ? marketCap / ttmFCF : 0
 
