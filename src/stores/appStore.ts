@@ -253,6 +253,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         marketImplied: null,
         monteCarloResult: null,
         predictions: [],
+        isLoadingPredictions: false,
         error: null,
         activeTab: 'input'
     }),
