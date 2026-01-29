@@ -10,7 +10,7 @@ import type {
     StructuralCheck,
     ExtendedFinancialData
 } from '@/types'
-import { calculateROIC, calculateImpliedGrowth } from './dcf-engine'
+import { calculateImpliedGrowth } from './dcf-engine'
 
 /**
  * Run structural consistency checks
@@ -31,15 +31,15 @@ export function runStructuralCheck(
     const avgAssumedGrowth = inputs.drivers.reduce((sum, d) => sum + d.revenueGrowth, 0) /
         inputs.drivers.length
 
-    // Calculate ROIC and reinvestment rate from latest driver
-    const lastDriver = inputs.drivers[inputs.drivers.length - 1]
+    // Use actual historical ROIC from financial data (more accurate than proxy)
+    // Clamp to reasonable range to avoid extreme values
+    const actualROIC = Math.max(0.05, Math.min(0.50, financialData.historicalROIC))
+
+    // Calculate average driver values for reinvestment rate
     const avgOpMargin = inputs.drivers.reduce((sum, d) => sum + d.operatingMargin, 0) /
         inputs.drivers.length
     const avgTaxRate = inputs.drivers.reduce((sum, d) => sum + d.taxRate, 0) /
         inputs.drivers.length
-
-    // Proxy ROIC from margins
-    const proxyROIC = avgOpMargin * (1 - avgTaxRate) * 2 // Approximate asset turnover of 2x
 
     // Calculate reinvestment rate
     const avgCapex = inputs.drivers.reduce((sum, d) => sum + d.capexPercent, 0) /
@@ -54,8 +54,8 @@ export function runStructuralCheck(
         ? (avgCapex - avgDA + avgWC) / netNopatMargin
         : 0
 
-    // Calculate implied growth
-    const impliedGrowth = calculateImpliedGrowth(proxyROIC, reinvestmentRate)
+    // Calculate implied growth using actual ROIC
+    const impliedGrowth = calculateImpliedGrowth(actualROIC, reinvestmentRate)
     const growthDeviation = Math.abs(avgAssumedGrowth - impliedGrowth)
     const growthIsValid = growthDeviation < 0.05 // Within 5% tolerance
 
@@ -71,6 +71,8 @@ export function runStructuralCheck(
     // 2. CapEx/D&A Ratio Check
     // Should approach 1.0 in steady state
     // -----------------------------------------
+
+    const lastDriver = inputs.drivers[inputs.drivers.length - 1]
 
     const lastCapex = lastDriver.capexPercent
     const lastDA = lastDriver.daPercent
