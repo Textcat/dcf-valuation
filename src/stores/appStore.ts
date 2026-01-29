@@ -10,12 +10,18 @@ import type {
     StructuralCheck,
     MarketImplied,
     MonteCarloResult,
-    ValueDrivers
+    ValueDrivers,
+    NearTermPrediction
 } from '@/types'
 import { fetchExtendedFinancialData } from '@/services/fmp'
 import { calculateDCF } from '@/engines/dcf-engine'
 import { runStructuralCheck } from '@/engines/layer-b'
 import { calculateMarketImplied } from '@/engines/layer-c'
+import {
+    savePrediction,
+    getRecentPredictions,
+    getPredictionsBySymbol
+} from '@/services/predictionStore'
 
 // ============================================================
 // Store Interface
@@ -31,6 +37,10 @@ interface AppStore {
     marketImplied: MarketImplied | null
     monteCarloResult: MonteCarloResult | null
 
+    // Prediction History
+    predictions: NearTermPrediction[]
+    isLoadingPredictions: boolean
+
     // UI State
     isLoading: boolean
     error: string | null
@@ -44,6 +54,11 @@ interface AppStore {
     setActiveTab: (tab: 'input' | 'validation' | 'monte-carlo' | 'history') => void
     clearError: () => void
     reset: () => void
+
+    // Prediction Actions
+    loadPredictions: () => Promise<void>
+    loadPredictionsForSymbol: (symbol: string) => Promise<void>
+    createPrediction: (targetQuarter: string) => Promise<string | null>
 }
 
 // ============================================================
@@ -92,6 +107,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     structuralCheck: null,
     marketImplied: null,
     monteCarloResult: null,
+    predictions: [],
+    isLoadingPredictions: false,
     isLoading: false,
     error: null,
     activeTab: 'input',
@@ -235,7 +252,70 @@ export const useAppStore = create<AppStore>((set, get) => ({
         structuralCheck: null,
         marketImplied: null,
         monteCarloResult: null,
+        predictions: [],
         error: null,
         activeTab: 'input'
-    })
+    }),
+
+    // Load recent predictions (all symbols)
+    loadPredictions: async () => {
+        set({ isLoadingPredictions: true })
+        try {
+            const predictions = await getRecentPredictions(50)
+            set({ predictions, isLoadingPredictions: false })
+        } catch (err) {
+            console.error('Failed to load predictions:', err)
+            set({ isLoadingPredictions: false })
+        }
+    },
+
+    // Load predictions for current symbol
+    loadPredictionsForSymbol: async (symbol: string) => {
+        set({ isLoadingPredictions: true })
+        try {
+            const predictions = await getPredictionsBySymbol(symbol)
+            set({ predictions, isLoadingPredictions: false })
+        } catch (err) {
+            console.error('Failed to load predictions for symbol:', err)
+            set({ isLoadingPredictions: false })
+        }
+    },
+
+    // Create a new prediction from current DCF inputs
+    createPrediction: async (targetQuarter: string) => {
+        const { dcfInputs, currentSymbol } = get()
+        if (!dcfInputs || !currentSymbol) return null
+
+        // 使用第一年的 drivers 作为预测驱动因子
+        const predictedDrivers = dcfInputs.drivers[0]
+
+        const prediction: Omit<import('@/types').NearTermPrediction, 'id'> = {
+            symbol: currentSymbol,
+            createdAt: new Date(),
+            targetQuarter,
+            predictedDrivers,
+            confidenceIntervals: {
+                revenueGrowth: [
+                    predictedDrivers.revenueGrowth * 0.8,
+                    predictedDrivers.revenueGrowth * 1.2
+                ],
+                operatingMargin: [
+                    predictedDrivers.operatingMargin * 0.9,
+                    predictedDrivers.operatingMargin * 1.1
+                ],
+                fcf: [0, 0] // 需要单独计算
+            }
+        }
+
+        try {
+            const id = await savePrediction(prediction)
+            // 重新加载预测列表
+            const predictions = await getPredictionsBySymbol(currentSymbol)
+            set({ predictions })
+            return id
+        } catch (err) {
+            console.error('Failed to save prediction:', err)
+            return null
+        }
+    }
 }))
