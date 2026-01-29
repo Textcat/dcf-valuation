@@ -161,8 +161,9 @@ export function calculateDCF(
         ? fairValuePerShare / financialData.ttmEPS
         : 0
 
-    const impliedPFCF = financialData.ttmFCF > 0
-        ? equityValue / financialData.ttmFCF
+    // Implied EV/FCFF (企业价值倍数，因为 ttmFCF = FCFF)
+    const impliedEVtoFCF = financialData.ttmFCF > 0
+        ? enterpriseValue / financialData.ttmFCF
         : 0
 
     return {
@@ -173,18 +174,25 @@ export function calculateDCF(
         terminalValuePV,
         terminalValuePercent: (terminalValuePV / enterpriseValue) * 100,
         impliedPE,
-        impliedPFCF,
+        impliedEVtoFCF,
         projections
     }
 }
 
 /**
- * Calculate ROIC from financial data
+ * Calculate ROIC from financial data (using book value invested capital)
+ * ROIC = NOPAT / Invested Capital
+ * Invested Capital = Total Equity + Total Debt - Excess Cash (账面值口径)
+ * 使用账面值避免市值波动导致的自反馈偏差
  */
 export function calculateROIC(financialData: ExtendedFinancialData, taxRate: number): number {
     const nopat = financialData.ttmOperatingIncome * (1 - taxRate)
-    const investedCapital = financialData.totalDebt +
-        (financialData.marketCap - financialData.netCash) // Equity proxy
+
+    // 账面值口径的投入资本 = 股东权益 + 总负债 - 现金
+    // 这等价于 Operating Assets - Operating Liabilities
+    const investedCapital = financialData.totalEquity +
+        financialData.totalDebt -
+        financialData.totalCash
 
     return investedCapital > 0 ? nopat / investedCapital : 0
 }

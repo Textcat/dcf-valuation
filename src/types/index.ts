@@ -139,7 +139,7 @@ export interface DCFResult {
 
     // Implied metrics
     impliedPE: number
-    impliedPFCF: number
+    impliedEVtoFCF: number     // EV/FCFF (企业价值/企业自由现金流)
 
     // Yearly projections
     projections: YearProjection[]
