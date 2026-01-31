@@ -57,7 +57,18 @@ function SnapshotDetail({
     snapshot: ValuationSnapshot
     onClose: () => void
 }) {
-    const params = snapshot.inputParams
+    // Prefer fullInputs (new format), fall back to legacy inputParams
+    const hasFullInputs = !!snapshot.fullInputs
+    const dcfInputs = snapshot.fullInputs?.dcfInputs
+    const legacyParams = snapshot.inputParams
+
+    // Get WACC and terminal params from either source
+    const wacc = dcfInputs?.wacc ?? legacyParams?.wacc ?? 0
+    const explicitPeriodYears = dcfInputs?.explicitPeriodYears ?? legacyParams?.explicitPeriodYears ?? 5
+    const terminalGrowthRate = dcfInputs?.terminalGrowthRate ?? legacyParams?.terminalGrowthRate ?? 0
+    const steadyStateROIC = dcfInputs?.steadyStateROIC ?? legacyParams?.steadyStateROIC ?? 0
+    const fadeYears = dcfInputs?.fadeYears ?? legacyParams?.fadeYears ?? 10
+    const fadeStartGrowth = dcfInputs?.fadeStartGrowth ?? legacyParams?.fadeStartGrowth ?? 0
 
     return (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -75,6 +86,11 @@ function SnapshotDetail({
                             <p className="text-xs text-slate-500 mt-1">
                                 {formatDate(snapshot.createdAt)}
                             </p>
+                            {hasFullInputs && (
+                                <span className="inline-block mt-1 text-xs px-2 py-0.5 bg-blue-900/40 text-blue-400 rounded-full">
+                                    完整快照
+                                </span>
+                            )}
                         </div>
                         <button
                             onClick={onClose}
@@ -115,60 +131,79 @@ function SnapshotDetail({
                         <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                             <div className="flex justify-between">
                                 <span className="text-slate-400">WACC</span>
-                                <span className="text-white">{formatPercent(params.wacc)}</span>
+                                <span className="text-white">{formatPercent(wacc)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-400">显式期</span>
-                                <span className="text-white">{params.explicitPeriodYears} 年</span>
+                                <span className="text-white">{explicitPeriodYears} 年</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-400">永续增长率</span>
-                                <span className="text-white">{formatPercent(params.terminalGrowthRate)}</span>
+                                <span className="text-white">{formatPercent(terminalGrowthRate)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-400">稳态 ROIC</span>
-                                <span className="text-white">{formatPercent(params.steadyStateROIC)}</span>
+                                <span className="text-white">{formatPercent(steadyStateROIC)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-400">渐退期</span>
-                                <span className="text-white">{params.fadeYears} 年</span>
+                                <span className="text-white">{fadeYears} 年</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-400">渐退起始增长</span>
-                                <span className="text-white">{formatPercent(params.fadeStartGrowth)}</span>
+                                <span className="text-white">{formatPercent(fadeStartGrowth)}</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Year 1 Drivers */}
+                    {/* Yearly Drivers - show all years for new format, Year 1 only for legacy */}
                     <div className="mb-6">
-                        <h4 className="text-sm font-semibold text-slate-300 mb-3">第一年驱动因子</h4>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                            <div className="flex justify-between">
-                                <span className="text-slate-400">收入增长</span>
-                                <span className="text-white">{formatPercent(params.year1RevenueGrowth)}</span>
+                        <h4 className="text-sm font-semibold text-slate-300 mb-3">
+                            {hasFullInputs ? '显式期驱动因子 (5年)' : '第一年驱动因子'}
+                        </h4>
+                        {hasFullInputs && dcfInputs ? (
+                            <div className="space-y-3">
+                                {dcfInputs.drivers.map((driver, idx) => (
+                                    <div key={idx} className="bg-slate-800/30 rounded-lg p-2">
+                                        <div className="text-xs font-semibold text-blue-400 mb-1">Year {idx + 1}</div>
+                                        <div className="grid grid-cols-3 gap-2 text-xs">
+                                            <div><span className="text-slate-500">收入增速:</span> <span className="text-white">{formatPercent(driver.revenueGrowth)}</span></div>
+                                            <div><span className="text-slate-500">营业利润率:</span> <span className="text-white">{formatPercent(driver.operatingMargin)}</span></div>
+                                            <div><span className="text-slate-500">税率:</span> <span className="text-white">{formatPercent(driver.taxRate)}</span></div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-400">经营利润率</span>
-                                <span className="text-white">{formatPercent(params.year1OperatingMargin)}</span>
+                        ) : legacyParams ? (
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">收入增长</span>
+                                    <span className="text-white">{formatPercent(legacyParams.year1RevenueGrowth)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">经营利润率</span>
+                                    <span className="text-white">{formatPercent(legacyParams.year1OperatingMargin)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">税率</span>
+                                    <span className="text-white">{formatPercent(legacyParams.year1TaxRate)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">D&A %</span>
+                                    <span className="text-white">{formatPercent(legacyParams.year1DAPercent)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">CapEx %</span>
+                                    <span className="text-white">{formatPercent(legacyParams.year1CapexPercent)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">WC 变动 %</span>
+                                    <span className="text-white">{formatPercent(legacyParams.year1WCChangePercent)}</span>
+                                </div>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-400">税率</span>
-                                <span className="text-white">{formatPercent(params.year1TaxRate)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-400">D&A %</span>
-                                <span className="text-white">{formatPercent(params.year1DAPercent)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-400">CapEx %</span>
-                                <span className="text-white">{formatPercent(params.year1CapexPercent)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-400">WC 变动 %</span>
-                                <span className="text-white">{formatPercent(params.year1WCChangePercent)}</span>
-                            </div>
-                        </div>
+                        ) : (
+                            <p className="text-slate-500 text-sm">无参数数据</p>
+                        )}
                     </div>
 
                     {/* Note */}
@@ -201,7 +236,8 @@ export function SnapshotHistory() {
         currentSymbol,
         loadSnapshots,
         loadSnapshotsForSymbol,
-        deleteSnapshot
+        deleteSnapshot,
+        loadFromSnapshot
     } = useAppStore()
 
     const [selectedSnapshot, setSelectedSnapshot] = useState<ValuationSnapshot | null>(null)
@@ -392,6 +428,17 @@ export function SnapshotHistory() {
 
                                                 {/* Right: Actions */}
                                                 <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => loadFromSnapshot(snapshot)}
+                                                        disabled={!snapshot.fullInputs}
+                                                        className={`p-2 rounded-lg transition-colors ${snapshot.fullInputs
+                                                            ? 'text-blue-400 hover:text-blue-300 hover:bg-blue-900/30'
+                                                            : 'text-slate-600 cursor-not-allowed'
+                                                            }`}
+                                                        title={snapshot.fullInputs ? '分析此快照' : '旧格式快照，无法分析'}
+                                                    >
+                                                        📊
+                                                    </button>
                                                     <button
                                                         onClick={() => setSelectedSnapshot(snapshot)}
                                                         className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"

@@ -281,7 +281,7 @@ export interface MonteCarloResult {
 // Valuation Snapshot Types
 // ============================================================
 
-/** Key parameters saved in a valuation snapshot (Year 1 drivers) */
+/** Key parameters saved in a valuation snapshot (Year 1 drivers) - DEPRECATED */
 export interface SnapshotInputParams {
     wacc: number
     explicitPeriodYears: number
@@ -299,6 +299,12 @@ export interface SnapshotInputParams {
     year1WCChangePercent: number
 }
 
+/** Complete inputs saved in a valuation snapshot (new format) */
+export interface SnapshotFullInputs {
+    dcfInputs: DCFInputs                   // All 5 years' drivers + terminal settings
+    financialData: ExtendedFinancialData   // Market data at snapshot time
+}
+
 /** Valuation snapshot stored in IndexedDB */
 export interface ValuationSnapshot {
     id: string
@@ -306,8 +312,10 @@ export interface ValuationSnapshot {
     companyName: string
     createdAt: Date
     currentPrice: number
-    // Key input parameters
-    inputParams: SnapshotInputParams
+    // Complete inputs (new format)
+    fullInputs?: SnapshotFullInputs
+    // Key input parameters (deprecated, kept for backward compatibility)
+    inputParams?: SnapshotInputParams
     // Fair value from each terminal value method
     perpetuityFairValue: number
     roicDrivenFairValue: number

@@ -87,6 +87,7 @@ interface AppStore {
     loadSnapshotsForSymbol: (symbol: string) => Promise<void>
     saveCurrentAsSnapshot: (note?: string) => Promise<string | null>
     deleteSnapshot: (id: string) => Promise<void>
+    loadFromSnapshot: (snapshot: ValuationSnapshot) => void
 }
 
 // ============================================================
@@ -472,7 +473,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
             financialData
         )
 
-        // Extract Year 1 drivers
+        // Extract Year 1 drivers for legacy inputParams (backward compatibility)
         const year1Drivers = dcfInputs.drivers[0]
 
         const snapshot: ValuationSnapshot = {
@@ -481,6 +482,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
             companyName: financialData.companyName,
             createdAt: new Date(),
             currentPrice: financialData.currentPrice,
+            // New format: complete inputs for full restoration
+            fullInputs: {
+                dcfInputs: { ...dcfInputs },
+                financialData: { ...financialData }
+            },
+            // Legacy format (deprecated, kept for backward compatibility)
             inputParams: {
                 wacc: dcfInputs.wacc,
                 explicitPeriodYears: dcfInputs.explicitPeriodYears,
@@ -530,5 +537,38 @@ export const useAppStore = create<AppStore>((set, get) => ({
         } catch (err) {
             console.error('Failed to delete snapshot:', err)
         }
+    },
+
+    // Load a snapshot and restore full analysis state
+    loadFromSnapshot: (snapshot: ValuationSnapshot) => {
+        // Check if snapshot has full inputs (new format)
+        if (!snapshot.fullInputs) {
+            console.error('Snapshot does not have complete inputs (legacy format)')
+            set({ error: '此快照为旧格式，无法完整恢复。请使用新版本重新保存快照。' })
+            return
+        }
+
+        const { dcfInputs, financialData } = snapshot.fullInputs
+
+        // Restore state
+        set({
+            currentSymbol: snapshot.symbol,
+            financialData,
+            dcfInputs,
+            dcfResult: null,
+            structuralCheck: null,
+            marketImplied: null,
+            monteCarloResult: null,
+            monteCarloParams: null,
+            activeTab: 'input'
+        })
+
+        // Run DCF calculation and validation
+        const result = calculateDCF(dcfInputs, financialData)
+        set({ dcfResult: result })
+
+        const structuralCheck = runStructuralCheck(dcfInputs, result, financialData)
+        const marketImplied = calculateMarketImplied(financialData, dcfInputs.wacc)
+        set({ structuralCheck, marketImplied })
     }
 }))
