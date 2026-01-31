@@ -158,7 +158,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
             const totalCapital = data.marketCap + data.totalDebt
             const equityWeight = totalCapital > 0 ? data.marketCap / totalCapital : 0.8
             const debtWeight = 1 - equityWeight
-            const taxRate = 0.21
+            // Use effective tax rate for debt tax shield
+            const taxRate = data.effectiveTaxRate
 
             // WACC = E/V × Re + D/V × Rd × (1 - Tc)
             const calculatedWACC = equityWeight * costOfEquity +
@@ -187,6 +188,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
                 // Margins from current financials
                 if (data.grossMargin > 0) d.grossMargin = data.grossMargin
                 if (data.operatingMargin > 0) d.operatingMargin = data.operatingMargin
+
+                // Tax rate from effective tax rate (instead of default 21%)
+                d.taxRate = data.effectiveTaxRate
 
                 // Cash flow drivers from historical ratios
                 d.daPercent = data.historicalDAPercent
