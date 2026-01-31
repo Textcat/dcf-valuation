@@ -41,8 +41,8 @@ function UpsideBadge({ fairValue, currentPrice }: { fairValue: number; currentPr
 
     return (
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isPositive
-                ? 'bg-green-900/40 text-green-400'
-                : 'bg-red-900/40 text-red-400'
+            ? 'bg-green-900/40 text-green-400'
+            : 'bg-red-900/40 text-red-400'
             }`}>
             {isPositive ? '+' : ''}{upside.toFixed(1)}%
         </span>
@@ -206,6 +206,47 @@ export function SnapshotHistory() {
 
     const [selectedSnapshot, setSelectedSnapshot] = useState<ValuationSnapshot | null>(null)
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+    const [expandedSymbols, setExpandedSymbols] = useState<Set<string>>(new Set())
+
+    // Group snapshots by symbol
+    const groupedSnapshots = snapshots.reduce((acc, snapshot) => {
+        const symbol = snapshot.symbol
+        if (!acc[symbol]) {
+            acc[symbol] = []
+        }
+        acc[symbol].push(snapshot)
+        return acc
+    }, {} as Record<string, ValuationSnapshot[]>)
+
+    // Sort symbols by most recent snapshot
+    const sortedSymbols = Object.keys(groupedSnapshots).sort((a, b) => {
+        const aLatest = new Date(groupedSnapshots[a][0].createdAt).getTime()
+        const bLatest = new Date(groupedSnapshots[b][0].createdAt).getTime()
+        return bLatest - aLatest
+    })
+
+    // Toggle expand/collapse for a symbol group
+    const toggleSymbol = (symbol: string) => {
+        setExpandedSymbols(prev => {
+            const next = new Set(prev)
+            if (next.has(symbol)) {
+                next.delete(symbol)
+            } else {
+                next.add(symbol)
+            }
+            return next
+        })
+    }
+
+    // Expand all groups
+    const expandAll = () => {
+        setExpandedSymbols(new Set(sortedSymbols))
+    }
+
+    // Collapse all groups
+    const collapseAll = () => {
+        setExpandedSymbols(new Set())
+    }
 
     // Load snapshots on mount
     useEffect(() => {
@@ -250,95 +291,154 @@ export function SnapshotHistory() {
                 <h3 className="text-lg font-semibold text-white">
                     估值快照 ({snapshots.length})
                 </h3>
+                <div className="flex gap-2">
+                    <button
+                        onClick={expandAll}
+                        className="text-xs text-slate-400 hover:text-white transition-colors"
+                    >
+                        全部展开
+                    </button>
+                    <span className="text-slate-600">|</span>
+                    <button
+                        onClick={collapseAll}
+                        className="text-xs text-slate-400 hover:text-white transition-colors"
+                    >
+                        全部折叠
+                    </button>
+                </div>
             </div>
 
-            {/* Snapshot List */}
+            {/* Grouped Snapshot List */}
             <div className="space-y-3">
-                {snapshots.map((snapshot) => (
-                    <div
-                        key={snapshot.id}
-                        className="glass-card p-4 hover:bg-slate-800/60 transition-colors"
-                    >
-                        <div className="flex justify-between items-start">
-                            {/* Left: Info */}
-                            <div
-                                className="flex-1 cursor-pointer"
-                                onClick={() => setSelectedSnapshot(snapshot)}
+                {sortedSymbols.map((symbol) => {
+                    const symbolSnapshots = groupedSnapshots[symbol]
+                    const isExpanded = expandedSymbols.has(symbol)
+                    const latestSnapshot = symbolSnapshots[0]
+
+                    return (
+                        <div key={symbol} className="glass-card overflow-hidden">
+                            {/* Collapsible Header */}
+                            <button
+                                onClick={() => toggleSymbol(symbol)}
+                                className="w-full p-4 flex justify-between items-center hover:bg-slate-800/40 transition-colors"
                             >
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-bold text-white">{snapshot.symbol}</span>
-                                    <span className="text-xs text-slate-500">
-                                        {formatDate(snapshot.createdAt)}
+                                <div className="flex items-center gap-3">
+                                    <span className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                                        ▶
                                     </span>
-                                </div>
-                                <p className="text-sm text-slate-400 mb-2">
-                                    市价 {formatCurrency(snapshot.currentPrice)}
-                                </p>
-
-                                {/* Fair values summary */}
-                                <div className="flex gap-4 text-xs">
-                                    <div>
-                                        <span className="text-slate-500">永续:</span>
-                                        <span className="text-white ml-1">{formatCurrency(snapshot.perpetuityFairValue)}</span>
-                                        <span className="ml-1">
-                                            <UpsideBadge fairValue={snapshot.perpetuityFairValue} currentPrice={snapshot.currentPrice} />
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span className="text-slate-500">ROIC:</span>
-                                        <span className="text-white ml-1">{formatCurrency(snapshot.roicDrivenFairValue)}</span>
-                                    </div>
-                                    <div>
-                                        <span className="text-slate-500">Fade:</span>
-                                        <span className="text-white ml-1">{formatCurrency(snapshot.fadeFairValue)}</span>
+                                    <div className="text-left">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold text-white text-lg">{symbol}</span>
+                                            <span className="text-xs px-2 py-0.5 bg-slate-700 text-slate-300 rounded-full">
+                                                {symbolSnapshots.length} 条记录
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            {latestSnapshot.companyName} · 最近: {formatDate(latestSnapshot.createdAt)}
+                                        </p>
                                     </div>
                                 </div>
-                            </div>
-
-                            {/* Right: Actions */}
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => setSelectedSnapshot(snapshot)}
-                                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
-                                    title="查看详情"
-                                >
-                                    👁
-                                </button>
-                                {confirmDelete === snapshot.id ? (
-                                    <div className="flex items-center gap-1">
-                                        <button
-                                            onClick={() => handleDelete(snapshot.id)}
-                                            className="px-2 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded transition-colors"
-                                        >
-                                            确认
-                                        </button>
-                                        <button
-                                            onClick={() => setConfirmDelete(null)}
-                                            className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded transition-colors"
-                                        >
-                                            取消
-                                        </button>
+                                <div className="text-right">
+                                    <div className="text-sm text-slate-400">最新估值</div>
+                                    <div className="text-white font-semibold">
+                                        {formatCurrency(latestSnapshot.fadeFairValue)}
                                     </div>
-                                ) : (
-                                    <button
-                                        onClick={() => setConfirmDelete(snapshot.id)}
-                                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700/50 rounded-lg transition-colors"
-                                        title="删除"
-                                    >
-                                        🗑
-                                    </button>
-                                )}
-                            </div>
+                                    <UpsideBadge fairValue={latestSnapshot.fadeFairValue} currentPrice={latestSnapshot.currentPrice} />
+                                </div>
+                            </button>
+
+                            {/* Expanded Content */}
+                            {isExpanded && (
+                                <div className="border-t border-slate-700/50">
+                                    {symbolSnapshots.map((snapshot) => (
+                                        <div
+                                            key={snapshot.id}
+                                            className="p-4 border-b border-slate-700/30 last:border-b-0 hover:bg-slate-800/30 transition-colors"
+                                        >
+                                            <div className="flex justify-between items-start">
+                                                {/* Left: Info */}
+                                                <div
+                                                    className="flex-1 cursor-pointer"
+                                                    onClick={() => setSelectedSnapshot(snapshot)}
+                                                >
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-xs text-slate-500">
+                                                            {formatDate(snapshot.createdAt)}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sm text-slate-400 mb-2">
+                                                        市价 {formatCurrency(snapshot.currentPrice)}
+                                                    </p>
+
+                                                    {/* Fair values summary */}
+                                                    <div className="flex gap-4 text-xs">
+                                                        <div>
+                                                            <span className="text-slate-500">永续:</span>
+                                                            <span className="text-white ml-1">{formatCurrency(snapshot.perpetuityFairValue)}</span>
+                                                            <span className="ml-1">
+                                                                <UpsideBadge fairValue={snapshot.perpetuityFairValue} currentPrice={snapshot.currentPrice} />
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-slate-500">ROIC:</span>
+                                                            <span className="text-white ml-1">{formatCurrency(snapshot.roicDrivenFairValue)}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-slate-500">Fade:</span>
+                                                            <span className="text-white ml-1">{formatCurrency(snapshot.fadeFairValue)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Right: Actions */}
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => setSelectedSnapshot(snapshot)}
+                                                        className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
+                                                        title="查看详情"
+                                                    >
+                                                        👁
+                                                    </button>
+                                                    {confirmDelete === snapshot.id ? (
+                                                        <div className="flex items-center gap-1">
+                                                            <button
+                                                                onClick={() => handleDelete(snapshot.id)}
+                                                                className="px-2 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded transition-colors"
+                                                            >
+                                                                确认
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setConfirmDelete(null)}
+                                                                className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded transition-colors"
+                                                            >
+                                                                取消
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => setConfirmDelete(snapshot.id)}
+                                                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700/50 rounded-lg transition-colors"
+                                                            title="删除"
+                                                        >
+                                                            🗑
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Note */}
+                                            {snapshot.note && (
+                                                <p className="mt-2 text-xs text-slate-500 italic truncate">
+                                                    "{snapshot.note}"
+                                                </p>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-
-                        {/* Note */}
-                        {snapshot.note && (
-                            <p className="mt-2 text-xs text-slate-500 italic truncate">
-                                "{snapshot.note}"
-                            </p>
-                        )}
-                    </div>
-                ))}
+                    )
+                })}
             </div>
 
             {/* Detail Modal */}
