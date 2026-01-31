@@ -64,6 +64,9 @@ export interface ExtendedFinancialData extends FinancialData {
     // SBC
     ttmSBC: number
     sbcToFCFRatio: number
+
+    // Tax
+    effectiveTaxRate: number  // Calculated from incomeTaxExpense / incomeBeforeTax
 }
 
 /** Analyst estimate for a fiscal year */

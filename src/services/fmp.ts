@@ -107,6 +107,9 @@ interface FMPIncomeStatement {
     netIncome: number
     eps: number
     weightedAverageShsOutDil: number
+    // Tax fields for effective tax rate calculation
+    incomeTaxExpense: number
+    incomeBeforeTax: number
 }
 
 interface FMPCashFlowStatement {
@@ -426,6 +429,33 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
     const netMargin = ttmRevenue > 0 ? ttmNetIncome / ttmRevenue : 0
 
     // ============================================================
+    // Calculate Effective Tax Rate (from annual data)
+    // ============================================================
+
+    let effectiveTaxRate = 0.21 // Default to US corporate rate
+    if (incomeAnnualData && incomeAnnualData.length > 0) {
+        const taxRates: number[] = []
+        for (const yr of incomeAnnualData) {
+            const taxExpense = toNum(yr.incomeTaxExpense)
+            const preTaxIncome = toNum(yr.incomeBeforeTax)
+            // Only include if pre-tax income is positive (valid tax rate)
+            if (preTaxIncome > 0 && taxExpense >= 0) {
+                const rate = taxExpense / preTaxIncome
+                // Sanity check: tax rate should be between 0% and 60%
+                if (rate >= 0 && rate <= 0.60) {
+                    taxRates.push(rate)
+                }
+            }
+        }
+        if (taxRates.length > 0) {
+            // Average of valid tax rates
+            const avgRate = taxRates.reduce((sum, r) => sum + r, 0) / taxRates.length
+            // Clamp to reasonable range: 5% - 45%
+            effectiveTaxRate = Math.max(0.05, Math.min(0.45, avgRate))
+        }
+    }
+
+    // ============================================================
     // Calculate Historical Ratios (from annual data)
     // ============================================================
 
@@ -488,8 +518,8 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
         // ROIC = NOPAT / Invested Capital
         // Invested Capital = Total Equity + Total Debt - Cash
         const investedCapital = totalEquity + totalDebt - totalCash
-        const taxRate = 0.21 // Assumed corporate tax rate
-        const nopat = ttmOperatingIncome * (1 - taxRate)
+        // Use calculated effective tax rate instead of hardcoded 21%
+        const nopat = ttmOperatingIncome * (1 - effectiveTaxRate)
 
         if (investedCapital > 0) {
             historicalROIC = nopat / investedCapital
@@ -623,6 +653,9 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
 
         // SBC
         ttmSBC,
-        sbcToFCFRatio: ttmFCF > 0 ? ttmSBC / ttmFCF : 0
+        sbcToFCFRatio: ttmFCF > 0 ? ttmSBC / ttmFCF : 0,
+
+        // Tax
+        effectiveTaxRate
     }
 }
