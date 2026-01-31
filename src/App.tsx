@@ -123,16 +123,34 @@ function App() {
                 </main>
             )}
 
-            {/* Empty State */}
+            {/* Empty State - with history access */}
             {!isLoading && !financialData && !error && (
-                <div className="max-w-6xl mx-auto">
-                    <div className="glass-card p-12 text-center">
-                        <div className="text-6xl mb-4">📊</div>
-                        <h2 className="text-2xl font-bold text-white mb-2">开始分析</h2>
-                        <p className="text-slate-400 max-w-md mx-auto">
-                            输入股票代码以加载财务数据，构建三层可验证的 DCF 估值模型
-                        </p>
+                <div className="max-w-6xl mx-auto space-y-6">
+                    {/* Quick access to history */}
+                    <div className="flex justify-end">
+                        <button
+                            onClick={() => setActiveTab('history')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                                ${activeTab === 'history'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                                }`}
+                        >
+                            📸 历史快照
+                        </button>
                     </div>
+
+                    {activeTab === 'history' ? (
+                        <SnapshotHistory />
+                    ) : (
+                        <div className="glass-card p-12 text-center">
+                            <div className="text-6xl mb-4">📊</div>
+                            <h2 className="text-2xl font-bold text-white mb-2">开始分析</h2>
+                            <p className="text-slate-400 max-w-md mx-auto">
+                                输入股票代码以加载财务数据，构建三层可验证的 DCF 估值模型
+                            </p>
+                        </div>
+                    )}
                 </div>
             )}
 
