@@ -6,6 +6,7 @@ import { TickerSearch } from '@/components/TickerSearch'
 import { FinancialOverview } from '@/components/FinancialOverview'
 import { DCFInputPanel } from '@/components/DCFInputPanel'
 import { ValidationDashboard } from '@/components/ValidationDashboard'
+import { MonteCarloDashboard } from '@/components/MonteCarloDashboard'
 import { SnapshotHistory } from '@/components/SnapshotHistory'
 import { useAppStore } from '@/stores/appStore'
 
@@ -114,11 +115,7 @@ function App() {
                     {/* Tab Content */}
                     {activeTab === 'input' && <DCFInputPanel />}
                     {activeTab === 'validation' && <ValidationDashboard />}
-                    {activeTab === 'monte-carlo' && (
-                        <div className="glass-card p-6 text-center text-slate-400">
-                            Monte Carlo 模拟功能即将推出...
-                        </div>
-                    )}
+                    {activeTab === 'monte-carlo' && <MonteCarloDashboard />}
                     {activeTab === 'history' && <SnapshotHistory />}
                 </main>
             )}
