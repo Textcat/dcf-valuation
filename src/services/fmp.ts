@@ -95,6 +95,7 @@ interface FMPProfile {
     currency: string
     exchange: string
     beta: number
+    country: string  // For matching with market risk premium
 }
 
 interface FMPIncomeStatement {
@@ -110,6 +111,8 @@ interface FMPIncomeStatement {
     // Tax fields for effective tax rate calculation
     incomeTaxExpense: number
     incomeBeforeTax: number
+    // Interest expense for cost of debt calculation
+    interestExpense: number
 }
 
 interface FMPCashFlowStatement {
@@ -168,6 +171,31 @@ interface FMPSearchResult {
     currency: string
     exchange: string
 }
+
+// WACC-related API types
+interface FMPTreasuryRate {
+    date: string
+    month1: number
+    month2: number
+    month3: number
+    month6: number
+    year1: number
+    year2: number
+    year3: number
+    year5: number
+    year7: number
+    year10: number  // 10Y Treasury - used as risk-free rate
+    year20: number
+    year30: number
+}
+
+interface FMPMarketRiskPremium {
+    country: string
+    continent: string
+    countryRiskPremium: number
+    totalEquityRiskPremium: number  // This is Rf + MRP for that country
+}
+
 
 // ============================================================
 // Exchange Rate Fetching
@@ -378,6 +406,7 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
     // Calculate TTM values from quarterly data
     let ttmRevenue = 0, ttmGrossProfit = 0, ttmOperatingIncome = 0, ttmNetIncome = 0
     let ttmFCF = 0, ttmDA = 0, ttmCapex = 0, ttmWCChange = 0, ttmSBC = 0
+    let ttmInterestExpense = 0
     let sharesOutstanding = 0
 
     if (incomeQuarterlyData && incomeQuarterlyData.length > 0) {
@@ -386,6 +415,7 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
             ttmGrossProfit += toNum(q.grossProfit)
             ttmOperatingIncome += toNum(q.operatingIncome)
             ttmNetIncome += toNum(q.netIncome)
+            ttmInterestExpense += toNum(q.interestExpense)
         }
         sharesOutstanding = toNum(incomeQuarterlyData[0].weightedAverageShsOutDil)
     }
@@ -536,9 +566,15 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
         }
     }
 
-    // Estimate cost of debt (simplified: assume 5% if we can't calculate)
-    // In reality, this would come from interest expense / total debt
-    const costOfDebt = 0.05
+    // Calculate cost of debt from interest expense / total debt
+    // TTM interest expense was calculated earlier, now apply exchange rate
+    const ttmInterestExpenseConverted = ttmInterestExpense * exchangeRate
+    let costOfDebt = 0.06  // Default fallback
+    if (totalDebt > 0 && ttmInterestExpenseConverted > 0) {
+        costOfDebt = ttmInterestExpenseConverted / totalDebt
+        // Clamp to reasonable range (2% - 12%)
+        costOfDebt = Math.max(0.02, Math.min(0.12, costOfDebt))
+    }
 
     // ============================================================
     // Process Analyst Estimates
@@ -664,6 +700,151 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
         sbcToFCFRatio: ttmFCF > 0 ? ttmSBC / ttmFCF : 0,
 
         // Tax
-        effectiveTaxRate
+        effectiveTaxRate,
+
+        // Interest expense (for cost of debt)
+        interestExpense: ttmInterestExpense * exchangeRate
     }
+}
+
+// ============================================================
+// WACC Inputs Fetching (Real-time Rf, MRP, Country Risk)
+// ============================================================
+
+export interface WACCInputs {
+    riskFreeRate: number           // 10Y Treasury yield (decimal, e.g., 0.0426)
+    marketRiskPremium: number      // Equity risk premium (decimal, e.g., 0.05)
+    countryRiskPremium: number     // Additional premium for non-US (decimal)
+}
+
+// Cache for WACC inputs (refreshes every hour)
+let waccCache: { data: WACCInputs; timestamp: number } | null = null
+let mrpByCountryCache: Map<string, FMPMarketRiskPremium> | null = null
+let mrpCacheTimestamp = 0
+const WACC_CACHE_DURATION_MS = 60 * 60 * 1000  // 1 hour
+
+/**
+ * Fetch WACC inputs from FMP API
+ * - Risk-free rate from 10Y Treasury
+ * - Market risk premium from FMP Market Risk Premium API
+ */
+export async function fetchWACCInputs(): Promise<WACCInputs> {
+    const now = Date.now()
+
+    // Return cached data if still valid
+    if (waccCache && (now - waccCache.timestamp) < WACC_CACHE_DURATION_MS) {
+        return waccCache.data
+    }
+
+    // Default fallback values
+    const defaults: WACCInputs = {
+        riskFreeRate: 0.045,       // 4.5%
+        marketRiskPremium: 0.05,   // 5%
+        countryRiskPremium: 0
+    }
+
+    try {
+        // Fetch 10Y Treasury rate
+        const treasuryUrl = buildUrl('treasury-rates', { limit: 1 })
+        const treasuryData = await fetchAndValidate<FMPTreasuryRate[]>(treasuryUrl)
+
+        let riskFreeRate = defaults.riskFreeRate
+        if (treasuryData && treasuryData.length > 0) {
+            // API returns percentage (e.g., 4.26), convert to decimal (0.0426)
+            riskFreeRate = toNum(treasuryData[0].year10) / 100
+            // Sanity check
+            if (riskFreeRate < 0.001 || riskFreeRate > 0.15) {
+                riskFreeRate = defaults.riskFreeRate
+            }
+        }
+
+        // Fetch Market Risk Premium data
+        await fetchAndCacheMRPData()
+
+        // Get US market risk premium (base case)
+        let marketRiskPremium = defaults.marketRiskPremium
+        if (mrpByCountryCache) {
+            const usData = mrpByCountryCache.get('United States')
+            if (usData) {
+                // totalEquityRiskPremium includes country risk, so for US it's pure ERP
+                // We use this directly as the market risk premium
+                marketRiskPremium = toNum(usData.totalEquityRiskPremium) / 100
+                if (marketRiskPremium < 0.02 || marketRiskPremium > 0.12) {
+                    marketRiskPremium = defaults.marketRiskPremium
+                }
+            }
+        }
+
+        const result: WACCInputs = {
+            riskFreeRate,
+            marketRiskPremium,
+            countryRiskPremium: 0  // Base case for US
+        }
+
+        waccCache = { data: result, timestamp: now }
+        return result
+
+    } catch (err) {
+        console.error('Failed to fetch WACC inputs:', err)
+        return defaults
+    }
+}
+
+/**
+ * Get country risk premium for a specific country
+ */
+export async function getCountryRiskPremium(country: string): Promise<number> {
+    await fetchAndCacheMRPData()
+
+    if (!mrpByCountryCache) return 0
+
+    const countryData = mrpByCountryCache.get(country)
+    if (!countryData) return 0
+
+    // Country risk premium is the additional premium over US
+    const crp = toNum(countryData.countryRiskPremium) / 100
+    return Math.max(0, Math.min(0.20, crp))  // Clamp to 0-20%
+}
+
+/**
+ * Fetch and cache Market Risk Premium data by country
+ */
+async function fetchAndCacheMRPData(): Promise<void> {
+    const now = Date.now()
+
+    if (mrpByCountryCache && (now - mrpCacheTimestamp) < WACC_CACHE_DURATION_MS) {
+        return
+    }
+
+    try {
+        const mrpUrl = buildUrl('market-risk-premium', {})
+        const mrpData = await fetchAndValidate<FMPMarketRiskPremium[]>(mrpUrl)
+
+        if (mrpData && mrpData.length > 0) {
+            mrpByCountryCache = new Map()
+            for (const item of mrpData) {
+                mrpByCountryCache.set(item.country, item)
+            }
+            mrpCacheTimestamp = now
+        }
+    } catch (err) {
+        console.error('Failed to fetch market risk premium data:', err)
+    }
+}
+
+/**
+ * Calculate cost of debt from interest expense and total debt
+ */
+export function calculateCostOfDebt(interestExpense: number, totalDebt: number): number {
+    if (totalDebt <= 0 || interestExpense < 0) {
+        return 0.06  // Default 6% if can't calculate
+    }
+
+    const costOfDebt = interestExpense / totalDebt
+
+    // Sanity check: cost of debt typically between 2% and 15%
+    if (costOfDebt < 0.02) return 0.04  // Floor at 4%
+    if (costOfDebt > 0.15) return 0.10  // Cap at 10%
+
+    return costOfDebt
 }

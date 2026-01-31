@@ -67,6 +67,9 @@ export interface ExtendedFinancialData extends FinancialData {
 
     // Tax
     effectiveTaxRate: number  // Calculated from incomeTaxExpense / incomeBeforeTax
+
+    // Interest expense (for cost of debt calculation)
+    interestExpense: number
 }
 
 /** Analyst estimate for a fiscal year */

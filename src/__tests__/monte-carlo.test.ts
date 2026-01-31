@@ -115,7 +115,8 @@ function createMockFinancialData(): ExtendedFinancialData {
         currentPFCF: 17,
         ttmSBC: 5000000,
         sbcToFCFRatio: 0.028,
-        effectiveTaxRate: 0.21
+        effectiveTaxRate: 0.21,
+        interestExpense: 1500000000  // $1.5B interest expense
     }
 }
 
