@@ -169,11 +169,6 @@ interface FMPSearchResult {
     exchange: string
 }
 
-interface FMPQuote {
-    symbol: string
-    price: number
-}
-
 // ============================================================
 // Exchange Rate Fetching
 // ============================================================

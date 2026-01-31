@@ -10,6 +10,7 @@ import type {
     StructuralCheck,
     MarketImplied,
     MonteCarloResult,
+    MonteCarloParams,
     ValueDrivers,
     NearTermPrediction,
     ValuationSnapshot
@@ -29,6 +30,8 @@ import {
     getRecentSnapshots,
     deleteSnapshot as deleteSnapshotFromDb
 } from '@/services/snapshotStore'
+import { createDefaultMonteCarloParams, runMonteCarloSimulation } from '@/engines/monte-carlo'
+import type { MonteCarloWorkerInput, MonteCarloWorkerOutput } from '@/engines/monte-carlo.worker'
 
 // ============================================================
 // Store Interface
@@ -57,6 +60,10 @@ interface AppStore {
     error: string | null
     activeTab: 'input' | 'validation' | 'monte-carlo' | 'history'
 
+    // Monte Carlo State
+    monteCarloParams: MonteCarloParams | null
+    isRunningMonteCarlo: boolean
+
     // Actions
     loadSymbol: (symbol: string) => Promise<void>
     setDCFInputs: (inputs: DCFInputs) => void
@@ -65,6 +72,10 @@ interface AppStore {
     setActiveTab: (tab: 'input' | 'validation' | 'monte-carlo' | 'history') => void
     clearError: () => void
     reset: () => void
+
+    // Monte Carlo Actions
+    setMonteCarloParams: (params: MonteCarloParams) => void
+    runMonteCarlo: () => Promise<void>
 
     // Prediction Actions
     loadPredictions: () => Promise<void>
@@ -131,6 +142,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     isLoading: false,
     error: null,
     activeTab: 'input',
+    monteCarloParams: null,
+    isRunningMonteCarlo: false,
 
     // Load a new symbol
     loadSymbol: async (symbol: string) => {
@@ -266,6 +279,68 @@ export const useAppStore = create<AppStore>((set, get) => ({
     // Clear error
     clearError: () => set({ error: null }),
 
+    // Set Monte Carlo params
+    setMonteCarloParams: (params: MonteCarloParams) => set({ monteCarloParams: params }),
+
+    // Run Monte Carlo simulation using Web Worker
+    runMonteCarlo: async () => {
+        const { dcfInputs, financialData, monteCarloParams } = get()
+        if (!dcfInputs || !financialData) return
+
+        // Create default params if not set (uses analyst dispersion when available)
+        const params = monteCarloParams || createDefaultMonteCarloParams(dcfInputs, financialData)
+
+        set({ isRunningMonteCarlo: true, monteCarloParams: params })
+
+        try {
+            // Check if Web Workers are supported
+            if (typeof Worker !== 'undefined') {
+                // Use Web Worker for parallel computation
+                const worker = new Worker(
+                    new URL('@/engines/monte-carlo.worker.ts', import.meta.url),
+                    { type: 'module' }
+                )
+
+                const workerInput: MonteCarloWorkerInput = {
+                    params,
+                    dcfInputs,
+                    financialData
+                }
+
+                worker.postMessage(workerInput)
+
+                worker.onmessage = (event: MessageEvent<MonteCarloWorkerOutput>) => {
+                    const { success, result, error, executionTimeMs } = event.data
+                    if (success && result) {
+                        console.log(`Monte Carlo completed in ${executionTimeMs?.toFixed(0)}ms`)
+                        set({ monteCarloResult: result, isRunningMonteCarlo: false })
+                    } else {
+                        console.error('Monte Carlo worker error:', error)
+                        set({ isRunningMonteCarlo: false, error: error || 'Monte Carlo simulation failed' })
+                    }
+                    worker.terminate()
+                }
+
+                worker.onerror = (error) => {
+                    console.error('Worker error:', error)
+                    set({ isRunningMonteCarlo: false, error: 'Web Worker error' })
+                    worker.terminate()
+                }
+            } else {
+                // Fallback: run synchronously (may block UI)
+                console.warn('Web Workers not supported, running Monte Carlo synchronously')
+                const result = runMonteCarloSimulation(params, dcfInputs, financialData)
+                set({ monteCarloResult: result, isRunningMonteCarlo: false })
+            }
+        } catch (err) {
+            console.error('Monte Carlo error:', err)
+            set({
+                isRunningMonteCarlo: false,
+                error: err instanceof Error ? err.message : 'Monte Carlo simulation failed'
+            })
+        }
+    },
+
     // Reset store
     reset: () => set({
         currentSymbol: null,
@@ -275,6 +350,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         structuralCheck: null,
         marketImplied: null,
         monteCarloResult: null,
+        monteCarloParams: null,
+        isRunningMonteCarlo: false,
         predictions: [],
         isLoadingPredictions: false,
         snapshots: [],
