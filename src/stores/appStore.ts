@@ -15,7 +15,7 @@ import type {
     NearTermPrediction,
     ValuationSnapshot
 } from '@/types'
-import { fetchExtendedFinancialData } from '@/services/fmp'
+import { fetchExtendedFinancialData, fetchWACCInputs, calculateCostOfDebt } from '@/services/fmp'
 import { calculateDCF } from '@/engines/dcf-engine'
 import { runStructuralCheck } from '@/engines/layer-b'
 import { calculateMarketImplied } from '@/engines/layer-c'
@@ -162,13 +162,20 @@ export const useAppStore = create<AppStore>((set, get) => ({
             }
 
             // ============================================================
-            // Calculate WACC using CAPM
+            // Calculate WACC using real-time API data
             // ============================================================
-            const riskFreeRate = 0.045  // 10Y Treasury ~4.5%
-            const marketRiskPremium = 0.05  // Historical equity premium ~5%
-            const costOfEquity = riskFreeRate + data.beta * marketRiskPremium
 
-            // Weight by market value (simplified: assume debt at book value)
+            // Fetch WACC inputs (Rf, MRP) from FMP API with caching
+            const waccInputs = await fetchWACCInputs()
+
+            // Cost of equity = Rf + β × MRP
+            const costOfEquity = waccInputs.riskFreeRate +
+                data.beta * waccInputs.marketRiskPremium
+
+            // Cost of debt = Interest Expense / Total Debt (calculated from actual data)
+            const costOfDebt = calculateCostOfDebt(data.interestExpense, data.totalDebt)
+
+            // Weight by market value (debt at book value)
             const totalCapital = data.marketCap + data.totalDebt
             const equityWeight = totalCapital > 0 ? data.marketCap / totalCapital : 0.8
             const debtWeight = 1 - equityWeight
@@ -177,10 +184,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
             // WACC = E/V × Re + D/V × Rd × (1 - Tc)
             const calculatedWACC = equityWeight * costOfEquity +
-                debtWeight * data.costOfDebt * (1 - taxRate)
+                debtWeight * costOfDebt * (1 - taxRate)
 
             // Clamp WACC to reasonable range (6% - 15%)
             const wacc = Math.max(0.06, Math.min(0.15, calculatedWACC))
+
+            // Log WACC components for debugging
+            console.log(`WACC for ${symbol}:`, {
+                Rf: (waccInputs.riskFreeRate * 100).toFixed(2) + '%',
+                MRP: (waccInputs.marketRiskPremium * 100).toFixed(2) + '%',
+                Beta: data.beta.toFixed(2),
+                Re: (costOfEquity * 100).toFixed(2) + '%',
+                Rd: (costOfDebt * 100).toFixed(2) + '%',
+                Tax: (taxRate * 100).toFixed(2) + '%',
+                WACC: (wacc * 100).toFixed(2) + '%'
+            })
 
             // ============================================================
             // Create DCF inputs with data-driven defaults
