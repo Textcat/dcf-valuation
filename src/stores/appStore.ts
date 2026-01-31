@@ -11,7 +11,8 @@ import type {
     MarketImplied,
     MonteCarloResult,
     ValueDrivers,
-    NearTermPrediction
+    NearTermPrediction,
+    ValuationSnapshot
 } from '@/types'
 import { fetchExtendedFinancialData } from '@/services/fmp'
 import { calculateDCF } from '@/engines/dcf-engine'
@@ -22,6 +23,12 @@ import {
     getRecentPredictions,
     getPredictionsBySymbol
 } from '@/services/predictionStore'
+import {
+    saveSnapshot,
+    getSnapshotsBySymbol,
+    getRecentSnapshots,
+    deleteSnapshot as deleteSnapshotFromDb
+} from '@/services/snapshotStore'
 
 // ============================================================
 // Store Interface
@@ -41,6 +48,10 @@ interface AppStore {
     predictions: NearTermPrediction[]
     isLoadingPredictions: boolean
 
+    // Snapshot History
+    snapshots: ValuationSnapshot[]
+    isLoadingSnapshots: boolean
+
     // UI State
     isLoading: boolean
     error: string | null
@@ -59,6 +70,12 @@ interface AppStore {
     loadPredictions: () => Promise<void>
     loadPredictionsForSymbol: (symbol: string) => Promise<void>
     createPrediction: (targetQuarter: string) => Promise<string | null>
+
+    // Snapshot Actions
+    loadSnapshots: () => Promise<void>
+    loadSnapshotsForSymbol: (symbol: string) => Promise<void>
+    saveCurrentAsSnapshot: (note?: string) => Promise<string | null>
+    deleteSnapshot: (id: string) => Promise<void>
 }
 
 // ============================================================
@@ -109,6 +126,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     monteCarloResult: null,
     predictions: [],
     isLoadingPredictions: false,
+    snapshots: [],
+    isLoadingSnapshots: false,
     isLoading: false,
     error: null,
     activeTab: 'input',
@@ -254,6 +273,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         monteCarloResult: null,
         predictions: [],
         isLoadingPredictions: false,
+        snapshots: [],
+        isLoadingSnapshots: false,
         error: null,
         activeTab: 'input'
     }),
@@ -317,6 +338,116 @@ export const useAppStore = create<AppStore>((set, get) => ({
         } catch (err) {
             console.error('Failed to save prediction:', err)
             return null
+        }
+    },
+
+    // ============================================================
+    // Snapshot Actions
+    // ============================================================
+
+    // Load recent snapshots (all symbols)
+    loadSnapshots: async () => {
+        set({ isLoadingSnapshots: true })
+        try {
+            const snapshots = await getRecentSnapshots(50)
+            set({ snapshots, isLoadingSnapshots: false })
+        } catch (err) {
+            console.error('Failed to load snapshots:', err)
+            set({ isLoadingSnapshots: false })
+        }
+    },
+
+    // Load snapshots for a specific symbol
+    loadSnapshotsForSymbol: async (symbol: string) => {
+        set({ isLoadingSnapshots: true })
+        try {
+            const snapshots = await getSnapshotsBySymbol(symbol)
+            set({ snapshots, isLoadingSnapshots: false })
+        } catch (err) {
+            console.error('Failed to load snapshots for symbol:', err)
+            set({ isLoadingSnapshots: false })
+        }
+    },
+
+    // Save current DCF analysis as a snapshot
+    saveCurrentAsSnapshot: async (note?: string) => {
+        const { dcfInputs, financialData, currentSymbol } = get()
+        if (!dcfInputs || !financialData || !currentSymbol) return null
+
+        // Import calculateDCF to compute fair values for all three methods
+        const { calculateDCF } = await import('@/engines/dcf-engine')
+
+        // Calculate fair value for each terminal method
+        const perpetuityResult = calculateDCF(
+            { ...dcfInputs, terminalMethod: 'perpetuity' },
+            financialData
+        )
+        const roicDrivenResult = calculateDCF(
+            { ...dcfInputs, terminalMethod: 'roic-driven' },
+            financialData
+        )
+        const fadeResult = calculateDCF(
+            { ...dcfInputs, terminalMethod: 'fade' },
+            financialData
+        )
+
+        // Extract Year 1 drivers
+        const year1Drivers = dcfInputs.drivers[0]
+
+        const snapshot: ValuationSnapshot = {
+            id: crypto.randomUUID(),
+            symbol: currentSymbol,
+            companyName: financialData.companyName,
+            createdAt: new Date(),
+            currentPrice: financialData.currentPrice,
+            inputParams: {
+                wacc: dcfInputs.wacc,
+                explicitPeriodYears: dcfInputs.explicitPeriodYears,
+                terminalGrowthRate: dcfInputs.terminalGrowthRate,
+                steadyStateROIC: dcfInputs.steadyStateROIC,
+                fadeYears: dcfInputs.fadeYears,
+                fadeStartGrowth: dcfInputs.fadeStartGrowth,
+                fadeStartROIC: dcfInputs.fadeStartROIC,
+                year1RevenueGrowth: year1Drivers.revenueGrowth,
+                year1OperatingMargin: year1Drivers.operatingMargin,
+                year1TaxRate: year1Drivers.taxRate,
+                year1DAPercent: year1Drivers.daPercent,
+                year1CapexPercent: year1Drivers.capexPercent,
+                year1WCChangePercent: year1Drivers.wcChangePercent
+            },
+            perpetuityFairValue: perpetuityResult.fairValuePerShare,
+            roicDrivenFairValue: roicDrivenResult.fairValuePerShare,
+            fadeFairValue: fadeResult.fairValuePerShare,
+            note
+        }
+
+        try {
+            const id = await saveSnapshot(snapshot)
+            // Reload snapshots
+            const snapshots = await getSnapshotsBySymbol(currentSymbol)
+            set({ snapshots })
+            return id
+        } catch (err) {
+            console.error('Failed to save snapshot:', err)
+            return null
+        }
+    },
+
+    // Delete a snapshot
+    deleteSnapshot: async (id: string) => {
+        const { currentSymbol } = get()
+        try {
+            await deleteSnapshotFromDb(id)
+            // Reload snapshots
+            if (currentSymbol) {
+                const snapshots = await getSnapshotsBySymbol(currentSymbol)
+                set({ snapshots })
+            } else {
+                const snapshots = await getRecentSnapshots(50)
+                set({ snapshots })
+            }
+        } catch (err) {
+            console.error('Failed to delete snapshot:', err)
         }
     }
 }))

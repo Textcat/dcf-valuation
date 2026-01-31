@@ -5,10 +5,11 @@
  */
 
 import Dexie, { type Table } from 'dexie'
-import type { NearTermPrediction } from '@/types'
+import type { NearTermPrediction, ValuationSnapshot } from '@/types'
 
 export class DCFDatabase extends Dexie {
     predictions!: Table<NearTermPrediction, string>
+    snapshots!: Table<ValuationSnapshot, string>
 
     constructor() {
         super('dcf-validation-db')
@@ -21,7 +22,14 @@ export class DCFDatabase extends Dexie {
             // - targetQuarter: 按目标季度查询待验证预测
             predictions: 'id, symbol, createdAt, targetQuarter'
         })
+
+        // Version 2: 新增估值快照表
+        this.version(2).stores({
+            predictions: 'id, symbol, createdAt, targetQuarter',
+            snapshots: 'id, symbol, createdAt'
+        })
     }
 }
 
 export const db = new DCFDatabase()
+

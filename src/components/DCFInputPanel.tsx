@@ -3,6 +3,7 @@
  * Allows users to configure DCF parameters
  */
 
+import { useState } from 'react'
 import { useAppStore } from '@/stores/appStore'
 import type { DCFInputs, ValueDrivers } from '@/types'
 
@@ -85,7 +86,10 @@ function DriverRow({
 }
 
 export function DCFInputPanel() {
-    const { dcfInputs, setDCFInputs, runDCF, dcfResult, runValidation, financialData } = useAppStore()
+    const { dcfInputs, setDCFInputs, runDCF, dcfResult, runValidation, financialData, saveCurrentAsSnapshot } = useAppStore()
+    const [snapshotNote, setSnapshotNote] = useState('')
+    const [isSaving, setIsSaving] = useState(false)
+    const [saveSuccess, setSaveSuccess] = useState(false)
 
     if (!dcfInputs || !financialData) return null
 
@@ -102,6 +106,23 @@ export function DCFInputPanel() {
     const handleCalculate = () => {
         runDCF()
         runValidation()
+        setSaveSuccess(false)
+    }
+
+    const handleSaveSnapshot = async () => {
+        setIsSaving(true)
+        setSaveSuccess(false)
+        try {
+            const id = await saveCurrentAsSnapshot(snapshotNote || undefined)
+            if (id) {
+                setSaveSuccess(true)
+                setSnapshotNote('')
+                // Reset success message after 3 seconds
+                setTimeout(() => setSaveSuccess(false), 3000)
+            }
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     return (
@@ -225,6 +246,43 @@ export function DCFInputPanel() {
                                 {dcfResult.terminalValuePercent.toFixed(0)}%
                             </div>
                         </div>
+                    </div>
+
+                    {/* Save Snapshot Section */}
+                    <div className="mt-4 pt-4 border-t border-slate-600/50">
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={snapshotNote}
+                                onChange={(e) => setSnapshotNote(e.target.value)}
+                                placeholder="添加备注 (可选)"
+                                className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 
+                                   text-white text-sm focus:outline-none focus:border-blue-500
+                                   placeholder:text-slate-500"
+                            />
+                            <button
+                                onClick={handleSaveSnapshot}
+                                disabled={isSaving}
+                                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 
+                                   text-white text-sm font-medium transition-colors
+                                   disabled:opacity-50 disabled:cursor-not-allowed
+                                   flex items-center gap-2"
+                            >
+                                {isSaving ? (
+                                    <>
+                                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        保存中...
+                                    </>
+                                ) : (
+                                    '📸 保存快照'
+                                )}
+                            </button>
+                        </div>
+                        {saveSuccess && (
+                            <p className="mt-2 text-sm text-emerald-400">
+                                ✓ 快照保存成功！可在"历史快照"页面查看
+                            </p>
+                        )}
                     </div>
                 </div>
             )}

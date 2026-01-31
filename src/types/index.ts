@@ -275,6 +275,45 @@ export interface MonteCarloResult {
 }
 
 // ============================================================
+// Valuation Snapshot Types
+// ============================================================
+
+/** Key parameters saved in a valuation snapshot (Year 1 drivers) */
+export interface SnapshotInputParams {
+    wacc: number
+    explicitPeriodYears: number
+    terminalGrowthRate: number
+    steadyStateROIC: number
+    fadeYears: number
+    fadeStartGrowth: number
+    fadeStartROIC: number
+    // Year 1 drivers
+    year1RevenueGrowth: number
+    year1OperatingMargin: number
+    year1TaxRate: number
+    year1DAPercent: number
+    year1CapexPercent: number
+    year1WCChangePercent: number
+}
+
+/** Valuation snapshot stored in IndexedDB */
+export interface ValuationSnapshot {
+    id: string
+    symbol: string
+    companyName: string
+    createdAt: Date
+    currentPrice: number
+    // Key input parameters
+    inputParams: SnapshotInputParams
+    // Fair value from each terminal value method
+    perpetuityFairValue: number
+    roicDrivenFairValue: number
+    fadeFairValue: number
+    // Optional note
+    note?: string
+}
+
+// ============================================================
 // UI State Types
 // ============================================================
 

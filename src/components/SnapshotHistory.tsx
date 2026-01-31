@@ -1,0 +1,353 @@
+/**
+ * Snapshot History Component
+ * 
+ * Display, view details, and delete valuation snapshots.
+ */
+
+import { useEffect, useState } from 'react'
+import { useAppStore } from '@/stores/appStore'
+import type { ValuationSnapshot } from '@/types'
+
+// Format number as percentage
+function formatPercent(value: number): string {
+    return (value * 100).toFixed(1) + '%'
+}
+
+// Format number as currency
+function formatCurrency(value: number): string {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(value)
+}
+
+// Format date
+function formatDate(date: Date): string {
+    return new Intl.DateTimeFormat('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    }).format(new Date(date))
+}
+
+// Upside/downside badge
+function UpsideBadge({ fairValue, currentPrice }: { fairValue: number; currentPrice: number }) {
+    const upside = ((fairValue / currentPrice) - 1) * 100
+    const isPositive = upside >= 0
+
+    return (
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isPositive
+                ? 'bg-green-900/40 text-green-400'
+                : 'bg-red-900/40 text-red-400'
+            }`}>
+            {isPositive ? '+' : ''}{upside.toFixed(1)}%
+        </span>
+    )
+}
+
+// Snapshot detail modal
+function SnapshotDetail({
+    snapshot,
+    onClose
+}: {
+    snapshot: ValuationSnapshot
+    onClose: () => void
+}) {
+    const params = snapshot.inputParams
+
+    return (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="glass-card max-w-lg w-full max-h-[80vh] overflow-y-auto">
+                <div className="p-6">
+                    {/* Header */}
+                    <div className="flex justify-between items-start mb-6">
+                        <div>
+                            <h3 className="text-xl font-bold text-white">
+                                {snapshot.symbol}
+                            </h3>
+                            <p className="text-sm text-slate-400">
+                                {snapshot.companyName}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                                {formatDate(snapshot.createdAt)}
+                            </p>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="text-slate-400 hover:text-white text-2xl"
+                        >
+                            ×
+                        </button>
+                    </div>
+
+                    {/* Fair Values */}
+                    <div className="mb-6">
+                        <h4 className="text-sm font-semibold text-slate-300 mb-3">公允价值</h4>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                                <p className="text-xs text-slate-400 mb-1">永续增长</p>
+                                <p className="text-lg font-bold text-white">{formatCurrency(snapshot.perpetuityFairValue)}</p>
+                                <UpsideBadge fairValue={snapshot.perpetuityFairValue} currentPrice={snapshot.currentPrice} />
+                            </div>
+                            <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                                <p className="text-xs text-slate-400 mb-1">ROIC驱动</p>
+                                <p className="text-lg font-bold text-white">{formatCurrency(snapshot.roicDrivenFairValue)}</p>
+                                <UpsideBadge fairValue={snapshot.roicDrivenFairValue} currentPrice={snapshot.currentPrice} />
+                            </div>
+                            <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                                <p className="text-xs text-slate-400 mb-1">Fade Model</p>
+                                <p className="text-lg font-bold text-white">{formatCurrency(snapshot.fadeFairValue)}</p>
+                                <UpsideBadge fairValue={snapshot.fadeFairValue} currentPrice={snapshot.currentPrice} />
+                            </div>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2 text-center">
+                            估值时市价: {formatCurrency(snapshot.currentPrice)}
+                        </p>
+                    </div>
+
+                    {/* Key Parameters */}
+                    <div className="mb-6">
+                        <h4 className="text-sm font-semibold text-slate-300 mb-3">关键参数</h4>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">WACC</span>
+                                <span className="text-white">{formatPercent(params.wacc)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">显式期</span>
+                                <span className="text-white">{params.explicitPeriodYears} 年</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">永续增长率</span>
+                                <span className="text-white">{formatPercent(params.terminalGrowthRate)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">稳态 ROIC</span>
+                                <span className="text-white">{formatPercent(params.steadyStateROIC)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">渐退期</span>
+                                <span className="text-white">{params.fadeYears} 年</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">渐退起始增长</span>
+                                <span className="text-white">{formatPercent(params.fadeStartGrowth)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Year 1 Drivers */}
+                    <div className="mb-6">
+                        <h4 className="text-sm font-semibold text-slate-300 mb-3">第一年驱动因子</h4>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">收入增长</span>
+                                <span className="text-white">{formatPercent(params.year1RevenueGrowth)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">经营利润率</span>
+                                <span className="text-white">{formatPercent(params.year1OperatingMargin)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">税率</span>
+                                <span className="text-white">{formatPercent(params.year1TaxRate)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">D&A %</span>
+                                <span className="text-white">{formatPercent(params.year1DAPercent)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">CapEx %</span>
+                                <span className="text-white">{formatPercent(params.year1CapexPercent)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">WC 变动 %</span>
+                                <span className="text-white">{formatPercent(params.year1WCChangePercent)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Note */}
+                    {snapshot.note && (
+                        <div className="mb-6">
+                            <h4 className="text-sm font-semibold text-slate-300 mb-2">备注</h4>
+                            <p className="text-sm text-slate-400 bg-slate-800/50 rounded-lg p-3">
+                                {snapshot.note}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Close button */}
+                    <button
+                        onClick={onClose}
+                        className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                    >
+                        关闭
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+export function SnapshotHistory() {
+    const {
+        snapshots,
+        isLoadingSnapshots,
+        currentSymbol,
+        loadSnapshots,
+        loadSnapshotsForSymbol,
+        deleteSnapshot
+    } = useAppStore()
+
+    const [selectedSnapshot, setSelectedSnapshot] = useState<ValuationSnapshot | null>(null)
+    const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+
+    // Load snapshots on mount
+    useEffect(() => {
+        if (currentSymbol) {
+            loadSnapshotsForSymbol(currentSymbol)
+        } else {
+            loadSnapshots()
+        }
+    }, [currentSymbol, loadSnapshots, loadSnapshotsForSymbol])
+
+    // Handle delete
+    const handleDelete = async (id: string) => {
+        await deleteSnapshot(id)
+        setConfirmDelete(null)
+    }
+
+    if (isLoadingSnapshots) {
+        return (
+            <div className="glass-card p-8 text-center">
+                <div className="inline-block w-8 h-8 border-4 border-blue-400 border-t-transparent rounded-full animate-spin mb-3" />
+                <p className="text-slate-400">加载快照历史...</p>
+            </div>
+        )
+    }
+
+    if (snapshots.length === 0) {
+        return (
+            <div className="glass-card p-8 text-center">
+                <div className="text-4xl mb-3">📸</div>
+                <h3 className="text-lg font-semibold text-white mb-2">暂无估值快照</h3>
+                <p className="text-slate-400 text-sm">
+                    在 DCF 参数页面完成估值后，点击"保存快照"按钮保存估值历史
+                </p>
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-4">
+            {/* Header */}
+            <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-white">
+                    估值快照 ({snapshots.length})
+                </h3>
+            </div>
+
+            {/* Snapshot List */}
+            <div className="space-y-3">
+                {snapshots.map((snapshot) => (
+                    <div
+                        key={snapshot.id}
+                        className="glass-card p-4 hover:bg-slate-800/60 transition-colors"
+                    >
+                        <div className="flex justify-between items-start">
+                            {/* Left: Info */}
+                            <div
+                                className="flex-1 cursor-pointer"
+                                onClick={() => setSelectedSnapshot(snapshot)}
+                            >
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-bold text-white">{snapshot.symbol}</span>
+                                    <span className="text-xs text-slate-500">
+                                        {formatDate(snapshot.createdAt)}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-slate-400 mb-2">
+                                    市价 {formatCurrency(snapshot.currentPrice)}
+                                </p>
+
+                                {/* Fair values summary */}
+                                <div className="flex gap-4 text-xs">
+                                    <div>
+                                        <span className="text-slate-500">永续:</span>
+                                        <span className="text-white ml-1">{formatCurrency(snapshot.perpetuityFairValue)}</span>
+                                        <span className="ml-1">
+                                            <UpsideBadge fairValue={snapshot.perpetuityFairValue} currentPrice={snapshot.currentPrice} />
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">ROIC:</span>
+                                        <span className="text-white ml-1">{formatCurrency(snapshot.roicDrivenFairValue)}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">Fade:</span>
+                                        <span className="text-white ml-1">{formatCurrency(snapshot.fadeFairValue)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right: Actions */}
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setSelectedSnapshot(snapshot)}
+                                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
+                                    title="查看详情"
+                                >
+                                    👁
+                                </button>
+                                {confirmDelete === snapshot.id ? (
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => handleDelete(snapshot.id)}
+                                            className="px-2 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded transition-colors"
+                                        >
+                                            确认
+                                        </button>
+                                        <button
+                                            onClick={() => setConfirmDelete(null)}
+                                            className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded transition-colors"
+                                        >
+                                            取消
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => setConfirmDelete(snapshot.id)}
+                                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700/50 rounded-lg transition-colors"
+                                        title="删除"
+                                    >
+                                        🗑
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Note */}
+                        {snapshot.note && (
+                            <p className="mt-2 text-xs text-slate-500 italic truncate">
+                                "{snapshot.note}"
+                            </p>
+                        )}
+                    </div>
+                ))}
+            </div>
+
+            {/* Detail Modal */}
+            {selectedSnapshot && (
+                <SnapshotDetail
+                    snapshot={selectedSnapshot}
+                    onClose={() => setSelectedSnapshot(null)}
+                />
+            )}
+        </div>
+    )
+}
