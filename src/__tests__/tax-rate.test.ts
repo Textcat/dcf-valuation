@@ -29,10 +29,21 @@ export function calculateEffectiveTaxRate(
     const taxRates: number[] = []
 
     for (const yr of annualData) {
-        const taxExpense = yr.incomeTaxExpense ?? 0
-        const preTaxIncome = yr.incomeBeforeTax ?? 0
+        const rawTaxExpense = yr.incomeTaxExpense
+        const rawPreTaxIncome = yr.incomeBeforeTax
 
-        // Only include if pre-tax income is positive (valid tax rate)
+        // Skip if either value is missing or not a finite number
+        // This prevents null/undefined from being treated as 0% tax rate
+        if (rawTaxExpense == null || rawPreTaxIncome == null ||
+            typeof rawTaxExpense !== 'number' || typeof rawPreTaxIncome !== 'number' ||
+            !isFinite(rawTaxExpense) || !isFinite(rawPreTaxIncome)) {
+            continue
+        }
+
+        const taxExpense = rawTaxExpense
+        const preTaxIncome = rawPreTaxIncome
+
+        // Only include if pre-tax income is positive and tax expense is non-negative
         if (preTaxIncome > 0 && taxExpense >= 0) {
             const rate = taxExpense / preTaxIncome
             // Sanity check: tax rate should be between 0% and 60%
@@ -157,6 +168,27 @@ describe('calculateEffectiveTaxRate', () => {
         ]
         // Average: 25%
         expect(calculateEffectiveTaxRate(data)).toBe(0.25)
+    })
+
+    it('treats null/undefined tax expense as invalid data, not 0%', () => {
+        // This is the bug fix test: if FMP omits incomeTaxExpense for a year,
+        // we should NOT treat it as 0% (which would understate tax and inflate valuations)
+        const data: IncomeData[] = [
+            { incomeTaxExpense: 20, incomeBeforeTax: 100 }, // 20%
+            { incomeTaxExpense: null as unknown as number, incomeBeforeTax: 100 }, // Missing - should be skipped
+            { incomeTaxExpense: 30, incomeBeforeTax: 100 }, // 30%
+        ]
+        // Average should be (20 + 30) / 2 = 25%, NOT (20 + 0 + 30) / 3 = 16.67%
+        expect(calculateEffectiveTaxRate(data)).toBe(0.25)
+    })
+
+    it('treats undefined tax expense as invalid data', () => {
+        const data: IncomeData[] = [
+            { incomeTaxExpense: 20, incomeBeforeTax: 100 },
+            { incomeTaxExpense: undefined as unknown as number, incomeBeforeTax: 100 },
+        ]
+        // Only one valid data point: 20%
+        expect(calculateEffectiveTaxRate(data)).toBe(0.20)
     })
 })
 

@@ -436,9 +436,22 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
     if (incomeAnnualData && incomeAnnualData.length > 0) {
         const taxRates: number[] = []
         for (const yr of incomeAnnualData) {
-            const taxExpense = toNum(yr.incomeTaxExpense)
-            const preTaxIncome = toNum(yr.incomeBeforeTax)
-            // Only include if pre-tax income is positive (valid tax rate)
+            // Check raw values first - treat null/undefined/NaN as invalid data
+            // (toNum would convert these to 0, creating a false 0% tax rate)
+            const rawTaxExpense = yr.incomeTaxExpense
+            const rawPreTaxIncome = yr.incomeBeforeTax
+
+            // Skip if either value is missing or not a finite number
+            if (rawTaxExpense == null || rawPreTaxIncome == null ||
+                typeof rawTaxExpense !== 'number' || typeof rawPreTaxIncome !== 'number' ||
+                !isFinite(rawTaxExpense) || !isFinite(rawPreTaxIncome)) {
+                continue
+            }
+
+            const taxExpense = rawTaxExpense
+            const preTaxIncome = rawPreTaxIncome
+
+            // Only include if pre-tax income is positive and tax expense is non-negative
             if (preTaxIncome > 0 && taxExpense >= 0) {
                 const rate = taxExpense / preTaxIncome
                 // Sanity check: tax rate should be between 0% and 60%
