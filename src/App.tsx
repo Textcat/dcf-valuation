@@ -6,11 +6,11 @@ import { TickerSearch } from '@/components/TickerSearch'
 import { FinancialOverview } from '@/components/FinancialOverview'
 import { DCFInputPanel } from '@/components/DCFInputPanel'
 import { ValidationDashboard } from '@/components/ValidationDashboard'
+import { SnapshotHistory } from '@/components/SnapshotHistory'
 import { useAppStore } from '@/stores/appStore'
 
 function App() {
     const {
-        currentSymbol,
         financialData,
         isLoading,
         error,
@@ -99,6 +99,16 @@ function App() {
                         >
                             Monte Carlo
                         </button>
+                        <button
+                            onClick={() => setActiveTab('history')}
+                            className={`tab-button px-1 py-3 text-sm font-medium transition-colors
+                ${activeTab === 'history'
+                                    ? 'text-white active'
+                                    : 'text-slate-400 hover:text-slate-200'
+                                }`}
+                        >
+                            历史快照
+                        </button>
                     </div>
 
                     {/* Tab Content */}
@@ -109,6 +119,7 @@ function App() {
                             Monte Carlo 模拟功能即将推出...
                         </div>
                     )}
+                    {activeTab === 'history' && <SnapshotHistory />}
                 </main>
             )}
 
