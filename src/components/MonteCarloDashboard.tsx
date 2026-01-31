@@ -68,8 +68,8 @@ interface PercentileCardProps {
 function PercentileCard({ label, value, color, isHighlighted }: PercentileCardProps) {
     return (
         <div className={`rounded-xl p-4 text-center transition-all ${isHighlighted
-                ? 'bg-gradient-to-br from-violet-600/30 to-fuchsia-600/30 border border-violet-500/50 scale-105'
-                : 'bg-slate-800/50'
+            ? 'bg-gradient-to-br from-violet-600/30 to-fuchsia-600/30 border border-violet-500/50 scale-105'
+            : 'bg-slate-800/50'
             }`}>
             <div className="text-xs text-slate-400 mb-1">{label}</div>
             <div className={`text-lg font-bold ${color}`}>
@@ -308,7 +308,7 @@ export function MonteCarloDashboard() {
                         <div className="bg-slate-800/50 rounded-xl p-4 text-center">
                             <div className="text-xs text-slate-400 mb-1">风险收益比</div>
                             <div className={`text-xl font-bold ${interpretation.riskRewardRatio > 2 ? 'text-emerald-400' :
-                                    interpretation.riskRewardRatio > 1 ? 'text-blue-400' : 'text-amber-400'
+                                interpretation.riskRewardRatio > 1 ? 'text-blue-400' : 'text-amber-400'
                                 }`}>
                                 {interpretation.riskRewardRatio.toFixed(2)}x
                             </div>
@@ -317,30 +317,39 @@ export function MonteCarloDashboard() {
                 </div>
             )}
 
-            {/* Statistics */}
-            <div className="glass-card p-6">
-                <h4 className="text-sm font-medium text-slate-300 mb-4">统计摘要</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="flex justify-between">
-                        <span className="text-slate-400">模拟次数</span>
-                        <span className="text-white font-medium">{monteCarloResult.valueDistribution.length.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-slate-400">均值</span>
-                        <span className="text-white font-medium">${monteCarloResult.mean.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-slate-400">标准差</span>
-                        <span className="text-white font-medium">${monteCarloResult.stdDev.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-slate-400">变异系数</span>
-                        <span className="text-white font-medium">
-                            {((monteCarloResult.stdDev / monteCarloResult.mean) * 100).toFixed(1)}%
-                        </span>
+            {/* Statistics - only show when we have valid results */}
+            {monteCarloResult.valueDistribution.length > 0 && monteCarloResult.mean > 0 ? (
+                <div className="glass-card p-6">
+                    <h4 className="text-sm font-medium text-slate-300 mb-4">统计摘要</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="flex justify-between">
+                            <span className="text-slate-400">有效迭代</span>
+                            <span className="text-white font-medium">{monteCarloResult.valueDistribution.length.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-400">均值</span>
+                            <span className="text-white font-medium">${monteCarloResult.mean.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-400">标准差</span>
+                            <span className="text-white font-medium">${monteCarloResult.stdDev.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-400">变异系数</span>
+                            <span className="text-white font-medium">
+                                {((monteCarloResult.stdDev / monteCarloResult.mean) * 100).toFixed(1)}%
+                            </span>
+                        </div>
                     </div>
                 </div>
-            </div>
+            ) : (
+                <div className="glass-card p-6 text-center">
+                    <div className="text-amber-400 text-lg mb-2">⚠️ 模拟失败</div>
+                    <div className="text-sm text-slate-400">
+                        所有迭代均未产生有效估值。请检查 DCF 参数（如 WACC 必须大于终值增长率）。
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
