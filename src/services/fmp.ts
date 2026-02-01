@@ -526,8 +526,10 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
                 const prevRevenue = toNum(incomeAnnualData[1].revenue) * exchangeRate
                 const revenueChange = annualRevenue - prevRevenue
 
-                // 使用汇总的 WC 变动 (正值表示 WC 减少/现金流入，负值表示 WC 增加/现金流出)
-                const wcChange = toNum(latestCF.changeInWorkingCapital) * exchangeRate
+                // 取反：现金流量表符号 → DCF 符号
+                // changeInWorkingCapital < 0 (WC增加/现金流出) → wcChange > 0 (减少FCF)
+                // changeInWorkingCapital > 0 (WC减少/现金流入) → wcChange < 0 (增加FCF)
+                const wcChange = -toNum(latestCF.changeInWorkingCapital) * exchangeRate
 
                 if (Math.abs(revenueChange) > 0) {
                     historicalWCChangePercent = wcChange / revenueChange
