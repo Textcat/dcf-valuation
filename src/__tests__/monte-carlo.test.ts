@@ -116,7 +116,9 @@ function createMockFinancialData(): ExtendedFinancialData {
         ttmSBC: 5000000,
         sbcToFCFRatio: 0.028,
         effectiveTaxRate: 0.21,
-        interestExpense: 1500000000  // $1.5B interest expense
+        interestExpense: 1500000000,  // $1.5B interest expense
+        sector: 'Technology',
+        industry: 'Software—Application'
     }
 }
 

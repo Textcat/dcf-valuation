@@ -96,6 +96,8 @@ interface FMPProfile {
     exchange: string
     beta: number
     country: string  // For matching with market risk premium
+    sector: string   // For industry benchmarks (e.g., "Technology")
+    industry: string // For industry benchmarks (e.g., "Semiconductors")
 }
 
 interface FMPIncomeStatement {
@@ -703,7 +705,11 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
         effectiveTaxRate,
 
         // Interest expense (for cost of debt)
-        interestExpense: ttmInterestExpense * exchangeRate
+        interestExpense: ttmInterestExpense * exchangeRate,
+
+        // Industry classification
+        sector: profile.sector || '',
+        industry: profile.industry || ''
     }
 }
 
