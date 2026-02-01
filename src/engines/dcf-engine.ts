@@ -19,14 +19,17 @@ export function calculateDCF(
     financialData: ExtendedFinancialData
 ): DCFResult {
     const projections: YearProjection[] = []
-    let revenue = inputs.baseRevenue
+    let prevRevenue = inputs.baseRevenue  // 记录前一年营收，用于计算 ΔRevenue
 
     // Calculate explicit period projections
     for (let year = 1; year <= inputs.explicitPeriodYears; year++) {
         const driver = inputs.drivers[year - 1]
 
         // Project revenue
-        revenue = revenue * (1 + driver.revenueGrowth)
+        const revenue = prevRevenue * (1 + driver.revenueGrowth)
+
+        // 计算营收变动 (用于 WC 计算)
+        const deltaRevenue = revenue - prevRevenue
 
         // Calculate operating income
         const operatingIncome = revenue * driver.operatingMargin
@@ -37,10 +40,14 @@ export function calculateDCF(
         // Calculate FCF components
         const da = revenue * driver.daPercent
         const capex = revenue * driver.capexPercent
-        const wcChange = revenue * driver.wcChangePercent
+        // ΔWC = wcChangePercent × ΔRevenue (与历史计算口径一致)
+        const wcChange = deltaRevenue * driver.wcChangePercent
 
         // FCF = NOPAT + D&A - CapEx - ΔWC
         const fcf = nopat + da - capex - wcChange
+
+        // 更新前一年营收
+        prevRevenue = revenue
 
         // Discount factor
         const discountFactor = Math.pow(1 + inputs.wacc, year)

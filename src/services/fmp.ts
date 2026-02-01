@@ -519,27 +519,20 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
             const annualCapex = Math.abs(toNum(latestCF.capitalExpenditure)) * exchangeRate
             historicalCapexPercent = annualCapex / annualRevenue
 
-            // WC Change as % of Revenue (use average if multiple years)
-            // 使用经营性 WC 分项: ΔAR + ΔInventory - ΔAP + ΔOther WC
-            // 这排除了现金和短期债务的变动，保持与 WACC 折现的一致性
+            // WC Change as % of Revenue Change (ΔWC / ΔRevenue)
+            // 注意: FMP Stable API 不再提供分项数据 (changeInAccountReceivables 等都是 null)
+            // 直接使用汇总的 changeInWorkingCapital
             if (cashFlowAnnualData.length >= 2 && incomeAnnualData.length >= 2) {
                 const prevRevenue = toNum(incomeAnnualData[1].revenue) * exchangeRate
                 const revenueChange = annualRevenue - prevRevenue
 
-                // 经营性净营运资本变动 (Operating Working Capital Change)
-                // 注意: FMP 中 changeInAccountReceivables/changeInInventory 为正表示现金流出
-                // changeInAccountPayables 为正表示现金流入，所以需要取反
-                const opWCChange = (
-                    toNum(latestCF.changeInAccountReceivables) +
-                    toNum(latestCF.changeInInventory) -
-                    toNum(latestCF.changeInAccountPayables) +
-                    toNum(latestCF.changeInOtherWorkingCapital)
-                ) * exchangeRate
+                // 使用汇总的 WC 变动 (正值表示 WC 减少/现金流入，负值表示 WC 增加/现金流出)
+                const wcChange = toNum(latestCF.changeInWorkingCapital) * exchangeRate
 
                 if (Math.abs(revenueChange) > 0) {
-                    historicalWCChangePercent = opWCChange / revenueChange
+                    historicalWCChangePercent = wcChange / revenueChange
                     // Clamp to reasonable range
-                    historicalWCChangePercent = Math.max(-0.15, Math.min(0.15, historicalWCChangePercent))
+                    historicalWCChangePercent = Math.max(-0.30, Math.min(0.30, historicalWCChangePercent))
                 }
             }
         }
