@@ -4,6 +4,11 @@
  */
 
 import { useAppStore } from '@/stores/appStore'
+import {
+    getIndustryBenchmark,
+    getDamodaranIndustryName,
+    getIndustryThresholds
+} from '@/data/industryBenchmarks'
 
 interface AlertCardProps {
     type: 'warning' | 'success' | 'info'
@@ -147,8 +152,8 @@ export function ValidationDashboard() {
                     <div className="bg-slate-800/50 rounded-xl p-4 text-center">
                         <div className="text-sm text-slate-400 mb-1">隐含增长率</div>
                         <div className={`text-xl font-bold ${marketImplied.feasibility.growthExceedsHistoricalFrequency
-                                ? 'text-amber-400'
-                                : 'text-white'
+                            ? 'text-amber-400'
+                            : 'text-white'
                             }`}>
                             {(marketImplied.impliedGrowthRate * 100).toFixed(1)}%
                         </div>
@@ -157,8 +162,8 @@ export function ValidationDashboard() {
                     <div className="bg-slate-800/50 rounded-xl p-4 text-center">
                         <div className="text-sm text-slate-400 mb-1">隐含利润率</div>
                         <div className={`text-xl font-bold ${marketImplied.feasibility.marginExceedsIndustryMax
-                                ? 'text-red-400'
-                                : 'text-white'
+                            ? 'text-red-400'
+                            : 'text-white'
                             }`}>
                             {(marketImplied.impliedSteadyStateMargin * 100).toFixed(1)}%
                         </div>
@@ -167,8 +172,8 @@ export function ValidationDashboard() {
                     <div className="bg-slate-800/50 rounded-xl p-4 text-center">
                         <div className="text-sm text-slate-400 mb-1">隐含ROIC</div>
                         <div className={`text-xl font-bold ${marketImplied.feasibility.roicExceedsHistoricalMax
-                                ? 'text-red-400'
-                                : 'text-white'
+                            ? 'text-red-400'
+                            : 'text-white'
                             }`}>
                             {(marketImplied.impliedROIC * 100).toFixed(1)}%
                         </div>
@@ -177,15 +182,106 @@ export function ValidationDashboard() {
                     <div className="bg-slate-800/50 rounded-xl p-4 text-center">
                         <div className="text-sm text-slate-400 mb-1">历史达成概率</div>
                         <div className={`text-xl font-bold ${marketImplied.historicalFrequency < 20
-                                ? 'text-red-400'
-                                : marketImplied.historicalFrequency < 40
-                                    ? 'text-amber-400'
-                                    : 'text-emerald-400'
+                            ? 'text-red-400'
+                            : marketImplied.historicalFrequency < 40
+                                ? 'text-amber-400'
+                                : 'text-emerald-400'
                             }`}>
                             {marketImplied.historicalFrequency}%
                         </div>
                     </div>
                 </div>
+
+                {/* Industry Benchmark Comparison */}
+                {financialData && (
+                    <div className="mb-6 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                        <div className="flex items-center gap-2 mb-3">
+                            <span className="text-slate-400 text-sm">行业基准</span>
+                            <span className="text-xs text-cyan-400 bg-cyan-900/30 px-2 py-0.5 rounded-full">
+                                {getDamodaranIndustryName(financialData.industry, financialData.sector)}
+                            </span>
+                        </div>
+                        {(() => {
+                            const benchmark = getIndustryBenchmark(financialData.industry, financialData.sector)
+                            const thresholds = getIndustryThresholds(benchmark)
+                            return (
+                                <div className="grid grid-cols-2 gap-4">
+                                    {/* Margin Comparison */}
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-slate-500">行业Operating Margin中位数</span>
+                                            <span className="text-slate-300">{(benchmark.operatingMargin * 100).toFixed(1)}%</span>
+                                        </div>
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-slate-500">隐含稳态利润率</span>
+                                            <span className={`font-medium ${marketImplied.impliedSteadyStateMargin > thresholds.marginError
+                                                    ? 'text-red-400'
+                                                    : marketImplied.impliedSteadyStateMargin > thresholds.marginWarning
+                                                        ? 'text-amber-400'
+                                                        : 'text-emerald-400'
+                                                }`}>
+                                                {(marketImplied.impliedSteadyStateMargin * 100).toFixed(1)}%
+                                            </span>
+                                        </div>
+                                        <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden relative">
+                                            {/* Industry benchmark marker */}
+                                            <div
+                                                className="absolute w-0.5 h-full bg-cyan-400/70"
+                                                style={{ left: `${Math.min(Math.max(benchmark.operatingMargin, 0) * 100, 60)}%` }}
+                                            />
+                                            {/* Implied value bar */}
+                                            <div
+                                                className={`h-full rounded-full ${marketImplied.impliedSteadyStateMargin > thresholds.marginError
+                                                        ? 'bg-red-500'
+                                                        : marketImplied.impliedSteadyStateMargin > thresholds.marginWarning
+                                                            ? 'bg-amber-500'
+                                                            : 'bg-emerald-500'
+                                                    }`}
+                                                style={{ width: `${Math.min(marketImplied.impliedSteadyStateMargin * 100, 60)}%` }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* ROIC Comparison */}
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-slate-500">行业After-tax ROIC中位数</span>
+                                            <span className="text-slate-300">{(benchmark.afterTaxROIC * 100).toFixed(1)}%</span>
+                                        </div>
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-slate-500">隐含ROIC</span>
+                                            <span className={`font-medium ${marketImplied.impliedROIC > thresholds.roicError
+                                                    ? 'text-red-400'
+                                                    : marketImplied.impliedROIC > thresholds.roicWarning
+                                                        ? 'text-amber-400'
+                                                        : 'text-emerald-400'
+                                                }`}>
+                                                {(marketImplied.impliedROIC * 100).toFixed(1)}%
+                                            </span>
+                                        </div>
+                                        <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden relative">
+                                            {/* Industry benchmark marker */}
+                                            <div
+                                                className="absolute w-0.5 h-full bg-cyan-400/70"
+                                                style={{ left: `${Math.min(Math.max(benchmark.afterTaxROIC, 0) * 100, 80)}%` }}
+                                            />
+                                            {/* Implied value bar */}
+                                            <div
+                                                className={`h-full rounded-full ${marketImplied.impliedROIC > thresholds.roicError
+                                                        ? 'bg-red-500'
+                                                        : marketImplied.impliedROIC > thresholds.roicWarning
+                                                            ? 'bg-amber-500'
+                                                            : 'bg-emerald-500'
+                                                    }`}
+                                                style={{ width: `${Math.min(marketImplied.impliedROIC * 100, 80)}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        })()}
+                    </div>
+                )}
 
                 {/* Feasibility Alerts */}
                 <div className="space-y-2">
@@ -232,8 +328,8 @@ export function ValidationDashboard() {
                         <div className="text-center">
                             <div className="text-sm text-slate-400">DCF 公允价值</div>
                             <div className={`text-3xl font-bold ${dcfResult.fairValuePerShare > financialData.currentPrice
-                                    ? 'text-emerald-400'
-                                    : 'text-red-400'
+                                ? 'text-emerald-400'
+                                : 'text-red-400'
                                 }`}>
                                 ${dcfResult.fairValuePerShare.toFixed(2)}
                             </div>
@@ -241,8 +337,8 @@ export function ValidationDashboard() {
                         <div className="text-center">
                             <div className="text-sm text-slate-400">价差</div>
                             <div className={`text-2xl font-bold ${dcfResult.fairValuePerShare > financialData.currentPrice
-                                    ? 'text-emerald-400'
-                                    : 'text-red-400'
+                                ? 'text-emerald-400'
+                                : 'text-red-400'
                                 }`}>
                                 {(((dcfResult.fairValuePerShare / financialData.currentPrice) - 1) * 100) > 0 ? '+' : ''}
                                 {(((dcfResult.fairValuePerShare / financialData.currentPrice) - 1) * 100).toFixed(1)}%

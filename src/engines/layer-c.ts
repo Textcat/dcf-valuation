@@ -3,9 +3,16 @@
  * 
  * Calculates what the market is implying about future growth/margins
  * based on the current stock price.
+ * 
+ * Uses Damodaran industry benchmarks for feasibility checks.
  */
 
 import type { MarketImplied, ExtendedFinancialData } from '@/types'
+import {
+    getIndustryBenchmark,
+    getIndustryThresholds,
+    getDamodaranIndustryName
+} from '@/data/industryBenchmarks'
 
 /**
  * Calculate market implied assumptions by reverse engineering
@@ -21,12 +28,18 @@ export function calculateMarketImplied(
         ttmFCF,
         ttmOperatingIncome,
         ttmRevenue,
-        netCash
+        netCash,
+        sector,
+        industry
     } = financialData
 
     // Current market cap adjusted for net cash = Enterprise Value
     const marketCap = currentPrice * sharesOutstanding
     const enterpriseValue = marketCap - netCash
+
+    // Get industry-specific benchmarks
+    const benchmark = getIndustryBenchmark(industry, sector)
+    const thresholds = getIndustryThresholds(benchmark)
 
     // -----------------------------------------
     // 1. Implied Growth Rate (from FCF yield)
@@ -87,16 +100,15 @@ export function calculateMarketImplied(
     const impliedFadeSpeed = Math.max(0.1, Math.min(1, fadeSpeedMultiplier))
 
     // -----------------------------------------
-    // 5. Feasibility Checks
+    // 5. Feasibility Checks (Industry-specific)
     // -----------------------------------------
 
-    // Industry max margins (tech = 40%, other = 25%)
-    const industryMaxMargin = 0.35
-    const marginExceedsIndustryMax = impliedSteadyStateMargin > industryMaxMargin
+    // Use dynamic thresholds from Damodaran benchmarks
+    // marginError = P90 equivalent (~2x industry median)
+    const marginExceedsIndustryMax = impliedSteadyStateMargin > thresholds.marginError
 
-    // Historical max ROIC
-    const historicalMaxROIC = 0.30
-    const roicExceedsHistoricalMax = impliedROIC > historicalMaxROIC
+    // roicError = P90 equivalent (~2x industry median)
+    const roicExceedsHistoricalMax = impliedROIC > thresholds.roicError
 
     // Historical growth frequency (% of companies that achieved this)
     // Rough estimate based on implied growth rate
@@ -106,21 +118,28 @@ export function calculateMarketImplied(
     }
 
     // -----------------------------------------
-    // 6. Historical Frequency Estimate
+    // 6. Historical Frequency Estimate (Industry-aware)
     // -----------------------------------------
 
     // Estimate % of companies that achieved these metrics
-    let historicalFrequency = 50 // Start at 50%
+    // Start at 50%, apply penalties based on deviation from industry norms
+    let historicalFrequency = 50
 
+    // Growth penalties (unchanged, as growth is more universal)
     if (impliedGrowthRate > 0.20) historicalFrequency -= 30
     else if (impliedGrowthRate > 0.15) historicalFrequency -= 20
     else if (impliedGrowthRate > 0.10) historicalFrequency -= 10
 
-    if (impliedROIC > 0.25) historicalFrequency -= 20
-    else if (impliedROIC > 0.20) historicalFrequency -= 10
+    // ROIC penalties (relative to industry)
+    // Compare to industry-specific thresholds instead of fixed values
+    if (impliedROIC > thresholds.roicError) historicalFrequency -= 25
+    else if (impliedROIC > thresholds.roicWarning) historicalFrequency -= 15
+    else if (impliedROIC > benchmark.afterTaxROIC * 1.2) historicalFrequency -= 5
 
-    if (impliedSteadyStateMargin > 0.30) historicalFrequency -= 15
-    else if (impliedSteadyStateMargin > 0.25) historicalFrequency -= 10
+    // Margin penalties (relative to industry)
+    if (impliedSteadyStateMargin > thresholds.marginError) historicalFrequency -= 20
+    else if (impliedSteadyStateMargin > thresholds.marginWarning) historicalFrequency -= 10
+    else if (impliedSteadyStateMargin > benchmark.operatingMargin * 1.2) historicalFrequency -= 5
 
     historicalFrequency = Math.max(1, historicalFrequency)
 
@@ -141,13 +160,32 @@ export function calculateMarketImplied(
 /**
  * Format market implied assumptions for display
  */
-export function formatMarketImplied(implied: MarketImplied): string[] {
+export function formatMarketImplied(
+    implied: MarketImplied,
+    financialData?: ExtendedFinancialData
+): string[] {
     const lines: string[] = []
 
     lines.push(`隐含增长率: ${(implied.impliedGrowthRate * 100).toFixed(1)}%`)
     lines.push(`隐含稳态利润率: ${(implied.impliedSteadyStateMargin * 100).toFixed(1)}%`)
     lines.push(`隐含ROIC: ${(implied.impliedROIC * 100).toFixed(1)}%`)
     lines.push(`达成概率估计: ${implied.historicalFrequency}%`)
+
+    // Add industry context if available
+    if (financialData?.sector || financialData?.industry) {
+        const industryName = getDamodaranIndustryName(
+            financialData.industry,
+            financialData.sector
+        )
+        const benchmark = getIndustryBenchmark(
+            financialData.industry,
+            financialData.sector
+        )
+        lines.push(``)
+        lines.push(`行业基准 (${industryName}):`)
+        lines.push(`  - 行业利润率中位数: ${(benchmark.operatingMargin * 100).toFixed(1)}%`)
+        lines.push(`  - 行业ROIC中位数: ${(benchmark.afterTaxROIC * 100).toFixed(1)}%`)
+    }
 
     return lines
 }

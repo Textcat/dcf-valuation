@@ -70,6 +70,10 @@ export interface ExtendedFinancialData extends FinancialData {
 
     // Interest expense (for cost of debt calculation)
     interestExpense: number
+
+    // Industry classification (from FMP profile)
+    sector: string      // e.g., "Technology", "Healthcare"
+    industry: string    // e.g., "Semiconductors", "Software—Application"
 }
 
 /** Analyst estimate for a fiscal year */
