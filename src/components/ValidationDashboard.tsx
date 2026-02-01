@@ -6,7 +6,8 @@
 import { useAppStore } from '@/stores/appStore'
 import {
     getIndustryBenchmark,
-    getDamodaranIndustryName
+    getDamodaranIndustryName,
+    getIndustryThresholds
 } from '@/data/industryBenchmarks'
 
 interface AlertCardProps {
@@ -202,6 +203,7 @@ export function ValidationDashboard() {
                         </div>
                         {(() => {
                             const benchmark = getIndustryBenchmark(financialData.industry, financialData.sector)
+                            const thresholds = getIndustryThresholds(benchmark)
                             return (
                                 <div className="grid grid-cols-2 gap-4">
                                     {/* Margin Comparison */}
@@ -212,9 +214,9 @@ export function ValidationDashboard() {
                                         </div>
                                         <div className="flex justify-between text-xs">
                                             <span className="text-slate-500">隐含稳态利润率</span>
-                                            <span className={`font-medium ${marketImplied.impliedSteadyStateMargin > benchmark.operatingMargin * 2
+                                            <span className={`font-medium ${marketImplied.impliedSteadyStateMargin > thresholds.marginError
                                                     ? 'text-red-400'
-                                                    : marketImplied.impliedSteadyStateMargin > benchmark.operatingMargin * 1.5
+                                                    : marketImplied.impliedSteadyStateMargin > thresholds.marginWarning
                                                         ? 'text-amber-400'
                                                         : 'text-emerald-400'
                                                 }`}>
@@ -225,13 +227,13 @@ export function ValidationDashboard() {
                                             {/* Industry benchmark marker */}
                                             <div
                                                 className="absolute w-0.5 h-full bg-cyan-400/70"
-                                                style={{ left: `${Math.min(benchmark.operatingMargin * 100, 60)}%` }}
+                                                style={{ left: `${Math.min(Math.max(benchmark.operatingMargin, 0) * 100, 60)}%` }}
                                             />
                                             {/* Implied value bar */}
                                             <div
-                                                className={`h-full rounded-full ${marketImplied.impliedSteadyStateMargin > benchmark.operatingMargin * 2
+                                                className={`h-full rounded-full ${marketImplied.impliedSteadyStateMargin > thresholds.marginError
                                                         ? 'bg-red-500'
-                                                        : marketImplied.impliedSteadyStateMargin > benchmark.operatingMargin * 1.5
+                                                        : marketImplied.impliedSteadyStateMargin > thresholds.marginWarning
                                                             ? 'bg-amber-500'
                                                             : 'bg-emerald-500'
                                                     }`}
@@ -248,9 +250,9 @@ export function ValidationDashboard() {
                                         </div>
                                         <div className="flex justify-between text-xs">
                                             <span className="text-slate-500">隐含ROIC</span>
-                                            <span className={`font-medium ${marketImplied.impliedROIC > benchmark.afterTaxROIC * 1.6
+                                            <span className={`font-medium ${marketImplied.impliedROIC > thresholds.roicError
                                                     ? 'text-red-400'
-                                                    : marketImplied.impliedROIC > benchmark.afterTaxROIC * 1.3
+                                                    : marketImplied.impliedROIC > thresholds.roicWarning
                                                         ? 'text-amber-400'
                                                         : 'text-emerald-400'
                                                 }`}>
@@ -261,13 +263,13 @@ export function ValidationDashboard() {
                                             {/* Industry benchmark marker */}
                                             <div
                                                 className="absolute w-0.5 h-full bg-cyan-400/70"
-                                                style={{ left: `${Math.min(benchmark.afterTaxROIC * 100, 80)}%` }}
+                                                style={{ left: `${Math.min(Math.max(benchmark.afterTaxROIC, 0) * 100, 80)}%` }}
                                             />
                                             {/* Implied value bar */}
                                             <div
-                                                className={`h-full rounded-full ${marketImplied.impliedROIC > benchmark.afterTaxROIC * 1.6
+                                                className={`h-full rounded-full ${marketImplied.impliedROIC > thresholds.roicError
                                                         ? 'bg-red-500'
-                                                        : marketImplied.impliedROIC > benchmark.afterTaxROIC * 1.3
+                                                        : marketImplied.impliedROIC > thresholds.roicWarning
                                                             ? 'bg-amber-500'
                                                             : 'bg-emerald-500'
                                                     }`}
