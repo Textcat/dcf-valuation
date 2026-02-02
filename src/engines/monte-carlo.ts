@@ -181,8 +181,12 @@ export function createDefaultMonteCarloParams(
     const year1 = inputs.drivers[0]
 
     // Default heuristic values
-    let revenueGrowthStdDev = Math.max(0.02, Math.abs(year1.revenueGrowth) * 0.3)
-    let marginStdDev = Math.max(0.02, year1.operatingMargin * 0.2)
+    const growthStdFloor = 0.002
+    const growthStdRel = 0.35
+    const marginStdFloor = 0.002
+    const marginStdRel = 0.20
+    let revenueGrowthStdDev = Math.max(growthStdFloor, Math.abs(year1.revenueGrowth) * growthStdRel)
+    let marginStdDev = Math.max(marginStdFloor, Math.abs(year1.operatingMargin) * marginStdRel)
 
     // Use analyst dispersion if available
     if (financialData?.analystEstimates && financialData.analystEstimates.length > 0) {
@@ -195,16 +199,17 @@ export function createDefaultMonteCarloParams(
             const impliedGrowthRange = revenueRange / financialData.ttmRevenue
             // Range represents ~4σ, so σ ≈ range/4
             const impliedStdDev = impliedGrowthRange / 4
-            // Clamp to reasonable bounds
-            revenueGrowthStdDev = Math.max(0.01, Math.min(0.15, impliedStdDev))
+            const growthStdCeil = Math.max(growthStdFloor, Math.abs(year1.revenueGrowth) * 0.8)
+            revenueGrowthStdDev = Math.max(growthStdFloor, Math.min(growthStdCeil, impliedStdDev))
         }
 
         // EPS dispersion can inform margin volatility
         if (fy1.epsHigh > 0 && fy1.epsLow > 0 && fy1.epsAvg > 0) {
             const epsRange = (fy1.epsHigh - fy1.epsLow) / fy1.epsAvg
             // EPS volatility is roughly proportional to margin volatility
-            const impliedMarginStdDev = epsRange / 4 * year1.operatingMargin
-            marginStdDev = Math.max(0.01, Math.min(0.10, impliedMarginStdDev))
+            const impliedMarginStdDev = (epsRange / 4) * year1.operatingMargin
+            const marginStdCeil = Math.max(marginStdFloor, Math.abs(year1.operatingMargin) * 0.8)
+            marginStdDev = Math.max(marginStdFloor, Math.min(marginStdCeil, impliedMarginStdDev))
         }
     }
 
@@ -226,14 +231,14 @@ export function createDefaultMonteCarloParams(
         },
         wacc: {
             mean: inputs.wacc,
-            stdDev: 0.01,
+            stdDev: Math.max(0.0015, Math.abs(inputs.wacc) * 0.15),
             min: 0.02,
             max: 0.20,
             distribution: 'lognormal'
         },
         terminalGrowth: {
             mean: inputs.terminalGrowthRate,
-            stdDev: Math.max(0.002, inputs.terminalGrowthRate * 0.2),
+            stdDev: Math.max(0.001, Math.abs(inputs.terminalGrowthRate) * 0.2),
             min: 0,
             max: 0.06
         },
@@ -251,7 +256,7 @@ export function createDefaultMonteCarloParams(
             roicDriven: {
                 steadyStateROIC: {
                     mean: inputs.steadyStateROIC,
-                    stdDev: Math.max(0.02, inputs.steadyStateROIC * 0.2),
+                    stdDev: Math.max(0.005, Math.abs(inputs.steadyStateROIC) * 0.25),
                     min: 0.03,
                     max: 0.50
                 },
@@ -260,19 +265,19 @@ export function createDefaultMonteCarloParams(
             fade: {
                 fadeYears: {
                     mean: inputs.fadeYears,
-                    stdDev: 2,
+                    stdDev: Math.max(1, Math.abs(inputs.fadeYears) * 0.2),
                     min: 3,
                     max: 20
                 },
                 fadeStartGrowth: {
                     mean: inputs.fadeStartGrowth,
-                    stdDev: 0.03,
+                    stdDev: Math.max(0.005, Math.abs(inputs.fadeStartGrowth) * 0.2),
                     min: 0,
                     max: 0.40
                 },
                 fadeStartROIC: {
                     mean: inputs.fadeStartROIC,
-                    stdDev: 0.03,
+                    stdDev: Math.max(0.005, Math.abs(inputs.fadeStartROIC) * 0.2),
                     min: 0.03,
                     max: 0.60
                 }
@@ -298,6 +303,17 @@ export function runMonteCarloSimulation(
         ? params.growth.means
         : baseInputs.drivers.map(d => d.revenueGrowth)
     const maxAttempts = 25
+    const dynamicBoundK = 3
+
+    const dynamicBounds = (mean: number, stdDev: number, hardMin: number, hardMax: number) => {
+        const min = Math.max(hardMin, mean - dynamicBoundK * stdDev)
+        const max = Math.min(hardMax, mean + dynamicBoundK * stdDev)
+        if (min <= max) {
+            return { min, max }
+        }
+        const fallback = clamp(mean, hardMin, hardMax)
+        return { min: fallback, max: fallback }
+    }
 
     for (let i = 0; i < params.iterations; i++) {
         let attempt = 0
@@ -317,10 +333,16 @@ export function runMonteCarloSimulation(
             const terminalGrowthShock = terminalGrowthZ * params.terminalGrowth.stdDev
 
             const growthPath: number[] = []
-            let prevGrowth = clamp(
-                growthMeans[0] + growthShock,
+            const firstGrowthBounds = dynamicBounds(
+                growthMeans[0],
+                params.growth.stdDev,
                 params.growth.min,
                 params.growth.max
+            )
+            let prevGrowth = clamp(
+                growthMeans[0] + growthShock,
+                firstGrowthBounds.min,
+                firstGrowthBounds.max
             )
             let prevShock = params.growth.stdDev > 0 ? growthShock / params.growth.stdDev : 0
             growthPath.push(prevGrowth)
@@ -331,65 +353,108 @@ export function runMonteCarloSimulation(
 
             for (let y = 1; y < baseInputs.explicitPeriodYears; y++) {
                 const mean = growthMeans[Math.min(y, growthMeans.length - 1)]
+                const bounds = dynamicBounds(mean, params.growth.stdDev, params.growth.min, params.growth.max)
                 const shock = yearCorr * prevShock + shockScale * randomStandardNormal()
                 const blended = mean + (prevGrowth - mean) * (1 - meanReversion) + shock * params.growth.stdDev
-                const nextGrowth = clamp(blended, params.growth.min, params.growth.max)
+                const nextGrowth = clamp(blended, bounds.min, bounds.max)
                 growthPath.push(nextGrowth)
                 prevGrowth = nextGrowth
                 prevShock = shock
             }
 
-            const sampledOperatingMargin = clamp(
-                params.operatingMargin.mean + marginShock,
+            const marginBounds = dynamicBounds(
+                params.operatingMargin.mean,
+                params.operatingMargin.stdDev,
                 params.operatingMargin.min,
                 params.operatingMargin.max
+            )
+            const sampledOperatingMargin = clamp(
+                params.operatingMargin.mean + marginShock,
+                marginBounds.min,
+                marginBounds.max
             )
 
             const sampledWaccRaw = params.wacc.distribution === 'lognormal'
                 ? sampleLogNormalFromZ(params.wacc.mean, params.wacc.stdDev, waccShock)
                 : params.wacc.mean + params.wacc.stdDev * waccShock
-            const sampledWacc = clamp(sampledWaccRaw, params.wacc.min, params.wacc.max)
+            const waccBounds = dynamicBounds(
+                params.wacc.mean,
+                params.wacc.stdDev,
+                params.wacc.min,
+                params.wacc.max
+            )
+            const sampledWacc = clamp(sampledWaccRaw, waccBounds.min, waccBounds.max)
 
-            const sampledTerminalGrowth = clamp(
-                params.terminalGrowth.mean + terminalGrowthShock,
+            const terminalGrowthBounds = dynamicBounds(
+                params.terminalGrowth.mean,
+                params.terminalGrowth.stdDev,
                 params.terminalGrowth.min,
                 params.terminalGrowth.max
             )
+            const sampledTerminalGrowth = clamp(
+                params.terminalGrowth.mean + terminalGrowthShock,
+                terminalGrowthBounds.min,
+                terminalGrowthBounds.max
+            )
 
+            const roicBounds = dynamicBounds(
+                params.terminalModel.roicDriven.steadyStateROIC.mean,
+                params.terminalModel.roicDriven.steadyStateROIC.stdDev,
+                params.terminalModel.roicDriven.steadyStateROIC.min,
+                params.terminalModel.roicDriven.steadyStateROIC.max
+            )
             const steadyStateROIC = clamp(
                 sampleNormal(
                     params.terminalModel.roicDriven.steadyStateROIC.mean,
                     params.terminalModel.roicDriven.steadyStateROIC.stdDev
                 ),
-                params.terminalModel.roicDriven.steadyStateROIC.min,
-                params.terminalModel.roicDriven.steadyStateROIC.max
+                roicBounds.min,
+                roicBounds.max
             )
 
+            const fadeYearsBounds = dynamicBounds(
+                params.terminalModel.fade.fadeYears.mean,
+                params.terminalModel.fade.fadeYears.stdDev,
+                params.terminalModel.fade.fadeYears.min,
+                params.terminalModel.fade.fadeYears.max
+            )
             const fadeYears = Math.round(clamp(
                 sampleNormal(
                     params.terminalModel.fade.fadeYears.mean,
                     params.terminalModel.fade.fadeYears.stdDev
                 ),
-                params.terminalModel.fade.fadeYears.min,
-                params.terminalModel.fade.fadeYears.max
+                fadeYearsBounds.min,
+                fadeYearsBounds.max
             ))
 
+            const fadeGrowthBounds = dynamicBounds(
+                params.terminalModel.fade.fadeStartGrowth.mean,
+                params.terminalModel.fade.fadeStartGrowth.stdDev,
+                params.terminalModel.fade.fadeStartGrowth.min,
+                params.terminalModel.fade.fadeStartGrowth.max
+            )
             const fadeStartGrowth = clamp(
                 sampleNormal(
                     params.terminalModel.fade.fadeStartGrowth.mean,
                     params.terminalModel.fade.fadeStartGrowth.stdDev
                 ),
-                params.terminalModel.fade.fadeStartGrowth.min,
-                params.terminalModel.fade.fadeStartGrowth.max
+                fadeGrowthBounds.min,
+                fadeGrowthBounds.max
             )
 
+            const fadeRoicBounds = dynamicBounds(
+                params.terminalModel.fade.fadeStartROIC.mean,
+                params.terminalModel.fade.fadeStartROIC.stdDev,
+                params.terminalModel.fade.fadeStartROIC.min,
+                params.terminalModel.fade.fadeStartROIC.max
+            )
             const fadeStartROIC = clamp(
                 sampleNormal(
                     params.terminalModel.fade.fadeStartROIC.mean,
                     params.terminalModel.fade.fadeStartROIC.stdDev
                 ),
-                params.terminalModel.fade.fadeStartROIC.min,
-                params.terminalModel.fade.fadeStartROIC.max
+                fadeRoicBounds.min,
+                fadeRoicBounds.max
             )
 
             if (sampledWacc - sampledTerminalGrowth < params.terminalModel.minWaccSpread) continue

@@ -254,8 +254,8 @@ describe('createDefaultMonteCarloParams', () => {
 
         const params = createDefaultMonteCarloParams(inputs, financialData)
 
-        // Should fall back to heuristic: max(0.02, growth * 0.3)
-        const expectedStdDev = Math.max(0.02, Math.abs(inputs.drivers[0].revenueGrowth) * 0.3)
+        // Should fall back to heuristic: max(0.002, growth * 0.35)
+        const expectedStdDev = Math.max(0.002, Math.abs(inputs.drivers[0].revenueGrowth) * 0.35)
         expect(params.growth.stdDev).toBe(expectedStdDev)
     })
 })
