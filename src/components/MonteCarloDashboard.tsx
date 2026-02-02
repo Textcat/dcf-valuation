@@ -124,6 +124,7 @@ export function MonteCarloDashboard() {
         isRunningMonteCarlo,
         financialData,
         dcfInputs,
+        monteCarloParams,
         runMonteCarlo
     } = useAppStore()
 
@@ -173,6 +174,10 @@ export function MonteCarloDashboard() {
     }
 
     const currentPrice = financialData.currentPrice
+    const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`
+    const formatRange = (min: number, max: number) => `${formatPercent(min)} ~ ${formatPercent(max)}`
+    const correlationVars = monteCarloParams?.correlation.variables || []
+    const correlationMatrix = monteCarloParams?.correlation.matrix || []
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -348,6 +353,151 @@ export function MonteCarloDashboard() {
                     <div className="text-sm text-slate-400">
                         所有迭代均未产生有效估值。请检查 DCF 参数（如 WACC 必须大于终值增长率）。
                     </div>
+                </div>
+            )}
+
+            {/* Assumptions */}
+            {monteCarloParams && (
+                <div className="glass-card p-6 space-y-6">
+                    <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-medium text-slate-300">模拟假设与分布</h4>
+                        <span className="text-xs text-slate-500">固定相关系数 + 硬约束重抽</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm">
+                        <div className="space-y-3">
+                            <div className="text-slate-400">增长率路径（逐年抽样）</div>
+                            <div className="bg-slate-800/50 rounded-xl p-4 space-y-2">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">均值路径</span>
+                                    <span className="text-white">
+                                        {monteCarloParams.growth.means.map(g => formatPercent(g)).join(' → ')}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">波动率</span>
+                                    <span className="text-white">{formatPercent(monteCarloParams.growth.stdDev)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">范围</span>
+                                    <span className="text-white">{formatRange(monteCarloParams.growth.min, monteCarloParams.growth.max)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">年际相关</span>
+                                    <span className="text-white">{monteCarloParams.growth.yearCorrelation.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">均值回归</span>
+                                    <span className="text-white">{monteCarloParams.growth.meanReversion.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="text-slate-400">关键驱动分布</div>
+                            <div className="bg-slate-800/50 rounded-xl p-4 space-y-2">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">营业利润率</span>
+                                    <span className="text-white">
+                                        {formatPercent(monteCarloParams.operatingMargin.mean)} ± {formatPercent(monteCarloParams.operatingMargin.stdDev)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">WACC ({monteCarloParams.wacc.distribution})</span>
+                                    <span className="text-white">
+                                        {formatPercent(monteCarloParams.wacc.mean)} ± {formatPercent(monteCarloParams.wacc.stdDev)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">终值增长率</span>
+                                    <span className="text-white">
+                                        {formatPercent(monteCarloParams.terminalGrowth.mean)} ± {formatPercent(monteCarloParams.terminalGrowth.stdDev)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">终值约束</span>
+                                    <span className="text-white">WACC - g ≥ {formatPercent(monteCarloParams.terminalModel.minWaccSpread)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm">
+                        <div className="space-y-3">
+                            <div className="text-slate-400">ROIC 终值参数</div>
+                            <div className="bg-slate-800/50 rounded-xl p-4 space-y-2">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">稳态 ROIC</span>
+                                    <span className="text-white">
+                                        {formatPercent(monteCarloParams.terminalModel.roicDriven.steadyStateROIC.mean)} ± {formatPercent(monteCarloParams.terminalModel.roicDriven.steadyStateROIC.stdDev)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">再投资率上限</span>
+                                    <span className="text-white">{formatPercent(monteCarloParams.terminalModel.roicDriven.maxReinvestmentRate)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="text-slate-400">Fade 终值参数</div>
+                            <div className="bg-slate-800/50 rounded-xl p-4 space-y-2">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">Fade 年数</span>
+                                    <span className="text-white">
+                                        {monteCarloParams.terminalModel.fade.fadeYears.mean.toFixed(0)} ± {monteCarloParams.terminalModel.fade.fadeYears.stdDev.toFixed(1)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">起始增长率</span>
+                                    <span className="text-white">
+                                        {formatPercent(monteCarloParams.terminalModel.fade.fadeStartGrowth.mean)} ± {formatPercent(monteCarloParams.terminalModel.fade.fadeStartGrowth.stdDev)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">起始 ROIC</span>
+                                    <span className="text-white">
+                                        {formatPercent(monteCarloParams.terminalModel.fade.fadeStartROIC.mean)} ± {formatPercent(monteCarloParams.terminalModel.fade.fadeStartROIC.stdDev)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {correlationVars.length > 0 && correlationMatrix.length > 0 && (
+                        <div className="space-y-3">
+                            <div className="text-slate-400">相关性矩阵</div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs border-separate border-spacing-1">
+                                    <thead>
+                                        <tr>
+                                            <th className="text-left text-slate-500 font-medium">变量</th>
+                                            {correlationVars.map(v => (
+                                                <th key={v} className="text-slate-400 font-medium px-2 py-1">
+                                                    {v}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {correlationVars.map((rowVar, rowIdx) => (
+                                            <tr key={rowVar}>
+                                                <td className="text-slate-400 pr-2">{rowVar}</td>
+                                                {correlationVars.map((colVar, colIdx) => (
+                                                    <td
+                                                        key={`${rowVar}-${colVar}`}
+                                                        className="bg-slate-800/50 rounded px-2 py-1 text-center text-slate-200"
+                                                    >
+                                                        {correlationMatrix[rowIdx]?.[colIdx]?.toFixed(2) ?? '—'}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

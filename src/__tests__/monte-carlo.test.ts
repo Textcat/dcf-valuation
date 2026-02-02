@@ -9,7 +9,7 @@ import {
     runMonteCarloSimulation,
     interpretMonteCarloResult
 } from '../engines/monte-carlo'
-import type { DCFInputs, MonteCarloParams, ExtendedFinancialData } from '../types'
+import type { DCFInputs, ExtendedFinancialData } from '../types'
 
 // ============================================================
 // Test Fixtures
@@ -200,10 +200,10 @@ describe('createDefaultMonteCarloParams', () => {
         const inputs = createMockDCFInputs()
         const params = createDefaultMonteCarloParams(inputs)
 
-        expect(params.revenueGrowth[0]).toBe(inputs.drivers[0].revenueGrowth)
-        expect(params.operatingMargin[0]).toBe(inputs.drivers[0].operatingMargin)
-        expect(params.wacc[0]).toBe(inputs.wacc)
-        expect(params.terminalGrowth[0]).toBe(inputs.terminalGrowthRate)
+        expect(params.growth.means[0]).toBe(inputs.drivers[0].revenueGrowth)
+        expect(params.operatingMargin.mean).toBe(inputs.drivers[0].operatingMargin)
+        expect(params.wacc.mean).toBe(inputs.wacc)
+        expect(params.terminalGrowth.mean).toBe(inputs.terminalGrowthRate)
     })
 
     it('sets appropriate standard deviations', () => {
@@ -211,10 +211,10 @@ describe('createDefaultMonteCarloParams', () => {
         const params = createDefaultMonteCarloParams(inputs)
 
         // StdDevs should be non-zero proportions of the mean
-        expect(params.revenueGrowth[1]).toBeGreaterThan(0)
-        expect(params.operatingMargin[1]).toBeGreaterThan(0)
-        expect(params.wacc[1]).toBeGreaterThan(0)
-        expect(params.terminalGrowth[1]).toBeGreaterThan(0)
+        expect(params.growth.stdDev).toBeGreaterThan(0)
+        expect(params.operatingMargin.stdDev).toBeGreaterThan(0)
+        expect(params.wacc.stdDev).toBeGreaterThan(0)
+        expect(params.terminalGrowth.stdDev).toBeGreaterThan(0)
     })
 
     it('defaults to 10000 iterations', () => {
@@ -244,7 +244,7 @@ describe('createDefaultMonteCarloParams', () => {
         const paramsWithoutAnalyst = createDefaultMonteCarloParams(inputs)
 
         // With analyst data, stdDev should be different from heuristic
-        expect(paramsWithAnalyst.revenueGrowth[1]).not.toBe(paramsWithoutAnalyst.revenueGrowth[1])
+        expect(paramsWithAnalyst.growth.stdDev).not.toBe(paramsWithoutAnalyst.growth.stdDev)
     })
 
     it('uses heuristic stdDev when no analyst data', () => {
@@ -256,7 +256,7 @@ describe('createDefaultMonteCarloParams', () => {
 
         // Should fall back to heuristic: max(0.02, growth * 0.3)
         const expectedStdDev = Math.max(0.02, Math.abs(inputs.drivers[0].revenueGrowth) * 0.3)
-        expect(params.revenueGrowth[1]).toBe(expectedStdDev)
+        expect(params.growth.stdDev).toBe(expectedStdDev)
     })
 })
 
@@ -268,13 +268,12 @@ describe('runMonteCarloSimulation', () => {
     it('returns valid percentile structure', () => {
         const dcfInputs = createMockDCFInputs()
         const financialData = createMockFinancialData()
-        const params: MonteCarloParams = {
-            iterations: 100,
-            revenueGrowth: [0.10, 0.02],
-            operatingMargin: [0.20, 0.02],
-            wacc: [0.09, 0.01],
-            terminalGrowth: [0.025, 0.005]
-        }
+        const params = createDefaultMonteCarloParams(dcfInputs)
+        params.iterations = 100
+        params.growth.stdDev = 0.02
+        params.operatingMargin.stdDev = 0.02
+        params.wacc.stdDev = 0.01
+        params.terminalGrowth.stdDev = 0.005
 
         const result = runMonteCarloSimulation(params, dcfInputs, financialData)
 
@@ -288,13 +287,12 @@ describe('runMonteCarloSimulation', () => {
     it('percentiles are in ascending order', () => {
         const dcfInputs = createMockDCFInputs()
         const financialData = createMockFinancialData()
-        const params: MonteCarloParams = {
-            iterations: 500,
-            revenueGrowth: [0.10, 0.02],
-            operatingMargin: [0.20, 0.02],
-            wacc: [0.09, 0.01],
-            terminalGrowth: [0.025, 0.005]
-        }
+        const params = createDefaultMonteCarloParams(dcfInputs)
+        params.iterations = 500
+        params.growth.stdDev = 0.02
+        params.operatingMargin.stdDev = 0.02
+        params.wacc.stdDev = 0.01
+        params.terminalGrowth.stdDev = 0.005
 
         const result = runMonteCarloSimulation(params, dcfInputs, financialData)
 
@@ -307,13 +305,12 @@ describe('runMonteCarloSimulation', () => {
     it('generates positive fair values', () => {
         const dcfInputs = createMockDCFInputs()
         const financialData = createMockFinancialData()
-        const params: MonteCarloParams = {
-            iterations: 100,
-            revenueGrowth: [0.10, 0.02],
-            operatingMargin: [0.20, 0.02],
-            wacc: [0.09, 0.01],
-            terminalGrowth: [0.025, 0.005]
-        }
+        const params = createDefaultMonteCarloParams(dcfInputs)
+        params.iterations = 100
+        params.growth.stdDev = 0.02
+        params.operatingMargin.stdDev = 0.02
+        params.wacc.stdDev = 0.01
+        params.terminalGrowth.stdDev = 0.005
 
         const result = runMonteCarloSimulation(params, dcfInputs, financialData)
 
@@ -324,13 +321,12 @@ describe('runMonteCarloSimulation', () => {
     it('computes mean and stdDev', () => {
         const dcfInputs = createMockDCFInputs()
         const financialData = createMockFinancialData()
-        const params: MonteCarloParams = {
-            iterations: 500,
-            revenueGrowth: [0.10, 0.02],
-            operatingMargin: [0.20, 0.02],
-            wacc: [0.09, 0.01],
-            terminalGrowth: [0.025, 0.005]
-        }
+        const params = createDefaultMonteCarloParams(dcfInputs)
+        params.iterations = 500
+        params.growth.stdDev = 0.02
+        params.operatingMargin.stdDev = 0.02
+        params.wacc.stdDev = 0.01
+        params.terminalGrowth.stdDev = 0.005
 
         const result = runMonteCarloSimulation(params, dcfInputs, financialData)
 
@@ -343,13 +339,12 @@ describe('runMonteCarloSimulation', () => {
     it('computes current price percentile', () => {
         const dcfInputs = createMockDCFInputs()
         const financialData = createMockFinancialData()
-        const params: MonteCarloParams = {
-            iterations: 500,
-            revenueGrowth: [0.10, 0.02],
-            operatingMargin: [0.20, 0.02],
-            wacc: [0.09, 0.01],
-            terminalGrowth: [0.025, 0.005]
-        }
+        const params = createDefaultMonteCarloParams(dcfInputs)
+        params.iterations = 500
+        params.growth.stdDev = 0.02
+        params.operatingMargin.stdDev = 0.02
+        params.wacc.stdDev = 0.01
+        params.terminalGrowth.stdDev = 0.005
 
         const result = runMonteCarloSimulation(params, dcfInputs, financialData)
 
@@ -361,13 +356,12 @@ describe('runMonteCarloSimulation', () => {
     it('handles edge case with very tight distribution', () => {
         const dcfInputs = createMockDCFInputs()
         const financialData = createMockFinancialData()
-        const params: MonteCarloParams = {
-            iterations: 100,
-            revenueGrowth: [0.10, 0.001], // Very tight
-            operatingMargin: [0.20, 0.001],
-            wacc: [0.09, 0.001],
-            terminalGrowth: [0.025, 0.001]
-        }
+        const params = createDefaultMonteCarloParams(dcfInputs)
+        params.iterations = 100
+        params.growth.stdDev = 0.001
+        params.operatingMargin.stdDev = 0.001
+        params.wacc.stdDev = 0.001
+        params.terminalGrowth.stdDev = 0.001
 
         const result = runMonteCarloSimulation(params, dcfInputs, financialData)
 
@@ -381,13 +375,16 @@ describe('runMonteCarloSimulation', () => {
         dcfInputs.terminalGrowthRate = 0.05 // Higher than WACC (invalid)
 
         const financialData = createMockFinancialData()
-        const params: MonteCarloParams = {
-            iterations: 10,
-            revenueGrowth: [0.10, 0.001],
-            operatingMargin: [0.20, 0.001],
-            wacc: [0.005, 0.001], // Very low WACC, likely to fail
-            terminalGrowth: [0.10, 0.001] // Higher than WACC
-        }
+        const params = createDefaultMonteCarloParams(dcfInputs)
+        params.iterations = 10
+        params.wacc.mean = 0.01
+        params.wacc.min = 0.005
+        params.wacc.max = 0.02
+        params.wacc.stdDev = 0.001
+        params.terminalGrowth.mean = 0.10
+        params.terminalGrowth.min = 0.08
+        params.terminalGrowth.max = 0.12
+        params.terminalModel.minWaccSpread = 0.02
 
         const result = runMonteCarloSimulation(params, dcfInputs, financialData)
 

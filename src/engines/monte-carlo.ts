@@ -76,6 +76,89 @@ export function sampleLogNormal(mean: number, stdDev: number): number {
     return Math.exp(mu + sigma * randomStandardNormal())
 }
 
+function sampleLogNormalFromZ(mean: number, stdDev: number, z: number): number {
+    const variance = stdDev * stdDev
+    const mu = Math.log(mean * mean / Math.sqrt(variance + mean * mean))
+    const sigma = Math.sqrt(Math.log(1 + variance / (mean * mean)))
+    return Math.exp(mu + sigma * z)
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value))
+}
+
+function isSymmetricMatrix(matrix: number[][]): boolean {
+    for (let i = 0; i < matrix.length; i++) {
+        for (let j = 0; j < matrix.length; j++) {
+            if (matrix[i][j] !== matrix[j][i]) return false
+        }
+    }
+    return true
+}
+
+function choleskyDecomposition(matrix: number[][]): number[][] | null {
+    const n = matrix.length
+    const L: number[][] = Array.from({ length: n }, () => Array(n).fill(0))
+
+    for (let i = 0; i < n; i++) {
+        for (let j = 0; j <= i; j++) {
+            let sum = matrix[i][j]
+            for (let k = 0; k < j; k++) {
+                sum -= L[i][k] * L[j][k]
+            }
+            if (i === j) {
+                if (sum <= 0) return null
+                L[i][j] = Math.sqrt(sum)
+            } else {
+                if (L[j][j] === 0) return null
+                L[i][j] = sum / L[j][j]
+            }
+        }
+    }
+
+    return L
+}
+
+function buildCorrelationCholesky(matrix: number[][]): number[][] {
+    const n = matrix.length
+    const identity = Array.from({ length: n }, (_, i) =>
+        Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))
+    )
+
+    if (n === 0) return identity
+    if (!isSymmetricMatrix(matrix)) return identity
+
+    let working = matrix.map(row => row.slice())
+    let L = choleskyDecomposition(working)
+    let jitter = 1e-4
+
+    while (!L && jitter <= 1e-2) {
+        for (let i = 0; i < n; i++) {
+            working[i][i] += jitter
+        }
+        L = choleskyDecomposition(working)
+        jitter *= 2
+    }
+
+    return L || identity
+}
+
+function sampleCorrelatedNormals(cholesky: number[][]): number[] {
+    const n = cholesky.length
+    const z = Array.from({ length: n }, () => randomStandardNormal())
+    const out = Array(n).fill(0)
+
+    for (let i = 0; i < n; i++) {
+        let sum = 0
+        for (let k = 0; k <= i; k++) {
+            sum += cholesky[i][k] * z[k]
+        }
+        out[i] = sum
+    }
+
+    return out
+}
+
 // ============================================================
 // Monte Carlo Simulation
 // ============================================================
@@ -93,7 +176,8 @@ export function createDefaultMonteCarloParams(
     inputs: DCFInputs,
     financialData?: ExtendedFinancialData
 ): MonteCarloParams {
-    // Base values from Year 1 drivers
+    // Base values from driver path
+    const growthPath = inputs.drivers.map(d => d.revenueGrowth)
     const year1 = inputs.drivers[0]
 
     // Default heuristic values
@@ -126,14 +210,74 @@ export function createDefaultMonteCarloParams(
 
     return {
         iterations: 10000,
-        // Revenue growth: use analyst-derived or heuristic stdDev
-        revenueGrowth: [year1.revenueGrowth, revenueGrowthStdDev],
-        // Operating margin: use EPS-derived or heuristic stdDev  
-        operatingMargin: [year1.operatingMargin, marginStdDev],
-        // WACC: ±1% absolute stdDev (market-driven, less company-specific)
-        wacc: [inputs.wacc, 0.01],
-        // Terminal growth: ±0.5% absolute stdDev (conservative)
-        terminalGrowth: [inputs.terminalGrowthRate, inputs.terminalGrowthRate * 0.2]
+        growth: {
+            means: growthPath,
+            stdDev: revenueGrowthStdDev,
+            min: -0.15,
+            max: 0.30,
+            yearCorrelation: 0.5,
+            meanReversion: 0.35
+        },
+        operatingMargin: {
+            mean: year1.operatingMargin,
+            stdDev: marginStdDev,
+            min: 0.01,
+            max: 0.60
+        },
+        wacc: {
+            mean: inputs.wacc,
+            stdDev: 0.01,
+            min: 0.02,
+            max: 0.20,
+            distribution: 'lognormal'
+        },
+        terminalGrowth: {
+            mean: inputs.terminalGrowthRate,
+            stdDev: Math.max(0.002, inputs.terminalGrowthRate * 0.2),
+            min: 0,
+            max: 0.06
+        },
+        correlation: {
+            variables: ['growth', 'margin', 'wacc', 'terminalGrowth'],
+            matrix: [
+                [1, 0.35, -0.20, 0.45],
+                [0.35, 1, -0.15, 0.25],
+                [-0.20, -0.15, 1, -0.10],
+                [0.45, 0.25, -0.10, 1]
+            ]
+        },
+        terminalModel: {
+            minWaccSpread: 0.005,
+            roicDriven: {
+                steadyStateROIC: {
+                    mean: inputs.steadyStateROIC,
+                    stdDev: Math.max(0.02, inputs.steadyStateROIC * 0.2),
+                    min: 0.03,
+                    max: 0.50
+                },
+                maxReinvestmentRate: 0.80
+            },
+            fade: {
+                fadeYears: {
+                    mean: inputs.fadeYears,
+                    stdDev: 2,
+                    min: 3,
+                    max: 20
+                },
+                fadeStartGrowth: {
+                    mean: inputs.fadeStartGrowth,
+                    stdDev: 0.03,
+                    min: 0,
+                    max: 0.40
+                },
+                fadeStartROIC: {
+                    mean: inputs.fadeStartROIC,
+                    stdDev: 0.03,
+                    min: 0.03,
+                    max: 0.60
+                }
+            }
+        }
     }
 }
 
@@ -149,47 +293,141 @@ export function runMonteCarloSimulation(
     financialData: ExtendedFinancialData
 ): MonteCarloResult {
     const values: number[] = []
+    const cholesky = buildCorrelationCholesky(params.correlation.matrix)
+    const growthMeans = params.growth.means.length > 0
+        ? params.growth.means
+        : baseInputs.drivers.map(d => d.revenueGrowth)
+    const maxAttempts = 25
 
     for (let i = 0; i < params.iterations; i++) {
-        // Sample from distributions
-        const sampledRevenueGrowth = sampleNormal(
-            params.revenueGrowth[0],
-            params.revenueGrowth[1]
-        )
-        const sampledOperatingMargin = Math.max(0.01, sampleNormal(
-            params.operatingMargin[0],
-            params.operatingMargin[1]
-        ))
-        const sampledWacc = Math.max(0.01, sampleNormal(
-            params.wacc[0],
-            params.wacc[1]
-        ))
-        const sampledTerminalGrowth = Math.max(0, Math.min(
-            sampledWacc - 0.01, // Terminal growth must be < WACC
-            sampleNormal(params.terminalGrowth[0], params.terminalGrowth[1])
-        ))
+        let attempt = 0
+        let modifiedInputs: DCFInputs | null = null
 
-        // Create modified inputs with sampled values
-        const modifiedInputs: DCFInputs = {
-            ...baseInputs,
-            wacc: sampledWacc,
-            terminalGrowthRate: sampledTerminalGrowth,
-            drivers: baseInputs.drivers.map((driver, idx) => ({
-                ...driver,
-                // Apply sampled growth to Year 1, decay for subsequent years
-                revenueGrowth: idx === 0
-                    ? sampledRevenueGrowth
-                    : driver.revenueGrowth * (sampledRevenueGrowth / baseInputs.drivers[0].revenueGrowth),
-                // Apply sampled margin uniformly
-                operatingMargin: sampledOperatingMargin
-            }))
+        while (attempt < maxAttempts && !modifiedInputs) {
+            attempt++
+
+            const correlated = sampleCorrelatedNormals(cholesky)
+            const growthZ = correlated[0] ?? randomStandardNormal()
+            const marginZ = correlated[1] ?? randomStandardNormal()
+            const waccZ = correlated[2] ?? randomStandardNormal()
+            const terminalGrowthZ = correlated[3] ?? randomStandardNormal()
+            const growthShock = growthZ * params.growth.stdDev
+            const marginShock = marginZ * params.operatingMargin.stdDev
+            const waccShock = waccZ
+            const terminalGrowthShock = terminalGrowthZ * params.terminalGrowth.stdDev
+
+            const growthPath: number[] = []
+            let prevGrowth = clamp(
+                growthMeans[0] + growthShock,
+                params.growth.min,
+                params.growth.max
+            )
+            let prevShock = params.growth.stdDev > 0 ? growthShock / params.growth.stdDev : 0
+            growthPath.push(prevGrowth)
+
+            const yearCorr = clamp(params.growth.yearCorrelation, -0.9, 0.9)
+            const meanReversion = clamp(params.growth.meanReversion, 0, 1)
+            const shockScale = Math.sqrt(1 - yearCorr * yearCorr)
+
+            for (let y = 1; y < baseInputs.explicitPeriodYears; y++) {
+                const mean = growthMeans[Math.min(y, growthMeans.length - 1)]
+                const shock = yearCorr * prevShock + shockScale * randomStandardNormal()
+                const blended = mean + (prevGrowth - mean) * (1 - meanReversion) + shock * params.growth.stdDev
+                const nextGrowth = clamp(blended, params.growth.min, params.growth.max)
+                growthPath.push(nextGrowth)
+                prevGrowth = nextGrowth
+                prevShock = shock
+            }
+
+            const sampledOperatingMargin = clamp(
+                params.operatingMargin.mean + marginShock,
+                params.operatingMargin.min,
+                params.operatingMargin.max
+            )
+
+            const sampledWaccRaw = params.wacc.distribution === 'lognormal'
+                ? sampleLogNormalFromZ(params.wacc.mean, params.wacc.stdDev, waccShock)
+                : params.wacc.mean + params.wacc.stdDev * waccShock
+            const sampledWacc = clamp(sampledWaccRaw, params.wacc.min, params.wacc.max)
+
+            const sampledTerminalGrowth = clamp(
+                params.terminalGrowth.mean + terminalGrowthShock,
+                params.terminalGrowth.min,
+                params.terminalGrowth.max
+            )
+
+            const steadyStateROIC = clamp(
+                sampleNormal(
+                    params.terminalModel.roicDriven.steadyStateROIC.mean,
+                    params.terminalModel.roicDriven.steadyStateROIC.stdDev
+                ),
+                params.terminalModel.roicDriven.steadyStateROIC.min,
+                params.terminalModel.roicDriven.steadyStateROIC.max
+            )
+
+            const fadeYears = Math.round(clamp(
+                sampleNormal(
+                    params.terminalModel.fade.fadeYears.mean,
+                    params.terminalModel.fade.fadeYears.stdDev
+                ),
+                params.terminalModel.fade.fadeYears.min,
+                params.terminalModel.fade.fadeYears.max
+            ))
+
+            const fadeStartGrowth = clamp(
+                sampleNormal(
+                    params.terminalModel.fade.fadeStartGrowth.mean,
+                    params.terminalModel.fade.fadeStartGrowth.stdDev
+                ),
+                params.terminalModel.fade.fadeStartGrowth.min,
+                params.terminalModel.fade.fadeStartGrowth.max
+            )
+
+            const fadeStartROIC = clamp(
+                sampleNormal(
+                    params.terminalModel.fade.fadeStartROIC.mean,
+                    params.terminalModel.fade.fadeStartROIC.stdDev
+                ),
+                params.terminalModel.fade.fadeStartROIC.min,
+                params.terminalModel.fade.fadeStartROIC.max
+            )
+
+            if (sampledWacc - sampledTerminalGrowth < params.terminalModel.minWaccSpread) continue
+
+            if (baseInputs.terminalMethod === 'roic-driven' || baseInputs.terminalMethod === 'fade') {
+                if (steadyStateROIC <= 0) continue
+                const reinvestmentRate = sampledTerminalGrowth / steadyStateROIC
+                if (reinvestmentRate < 0 || reinvestmentRate > params.terminalModel.roicDriven.maxReinvestmentRate) continue
+            }
+
+            if (baseInputs.terminalMethod === 'fade') {
+                if (fadeStartGrowth < sampledTerminalGrowth) continue
+                if (fadeStartROIC < steadyStateROIC) continue
+            }
+
+            modifiedInputs = {
+                ...baseInputs,
+                wacc: sampledWacc,
+                terminalGrowthRate: sampledTerminalGrowth,
+                steadyStateROIC,
+                fadeYears,
+                fadeStartGrowth,
+                fadeStartROIC,
+                drivers: baseInputs.drivers.map((driver, idx) => ({
+                    ...driver,
+                    revenueGrowth: growthPath[Math.min(idx, growthPath.length - 1)],
+                    operatingMargin: sampledOperatingMargin
+                }))
+            }
         }
 
         // Run DCF calculation
         try {
-            const result = calculateDCF(modifiedInputs, financialData)
-            if (isFinite(result.fairValuePerShare) && result.fairValuePerShare > 0) {
-                values.push(result.fairValuePerShare)
+            if (modifiedInputs) {
+                const result = calculateDCF(modifiedInputs, financialData)
+                if (isFinite(result.fairValuePerShare) && result.fairValuePerShare > 0) {
+                    values.push(result.fairValuePerShare)
+                }
             }
         } catch {
             // Skip failed iterations (e.g., negative values, division by zero)

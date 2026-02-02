@@ -258,11 +258,76 @@ export interface MarketImplied {
 export interface MonteCarloParams {
     iterations: number
 
-    // Driver distributions (mean, stdDev)
-    revenueGrowth: [number, number]
-    operatingMargin: [number, number]
-    wacc: [number, number]
-    terminalGrowth: [number, number]
+    // Growth process (multi-year with mean reversion)
+    growth: {
+        means: number[]        // Base growth path (per year)
+        stdDev: number         // Shock stdDev (absolute)
+        min: number            // Floor for sampled growth
+        max: number            // Cap for sampled growth
+        yearCorrelation: number // AR(1) correlation across years
+        meanReversion: number  // Reversion strength toward base path (0-1)
+    }
+
+    // Driver distributions
+    operatingMargin: {
+        mean: number
+        stdDev: number
+        min: number
+        max: number
+    }
+    wacc: {
+        mean: number
+        stdDev: number
+        min: number
+        max: number
+        distribution: 'normal' | 'lognormal'
+    }
+    terminalGrowth: {
+        mean: number
+        stdDev: number
+        min: number
+        max: number
+    }
+
+    // Correlation assumptions (applies to growth/margin/wacc/terminalGrowth)
+    correlation: {
+        variables: ('growth' | 'margin' | 'wacc' | 'terminalGrowth')[]
+        matrix: number[][]
+    }
+
+    // Terminal model parameters and constraints
+    terminalModel: {
+        minWaccSpread: number // Enforce WACC - g >= minWaccSpread
+        roicDriven: {
+            steadyStateROIC: {
+                mean: number
+                stdDev: number
+                min: number
+                max: number
+            }
+            maxReinvestmentRate: number
+        }
+        fade: {
+            fadeYears: {
+                mean: number
+                stdDev: number
+                min: number
+                max: number
+            }
+            fadeStartGrowth: {
+                mean: number
+                stdDev: number
+                min: number
+                max: number
+            }
+            fadeStartROIC: {
+                mean: number
+                stdDev: number
+                min: number
+                max: number
+            }
+        }
+    }
 }
 
 /** Monte Carlo simulation results */
