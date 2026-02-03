@@ -43,14 +43,29 @@ interface MetricBarProps {
     min?: number
     max?: number
     isPercent?: boolean
+    targetLabel?: string
+    targetIsPercent?: boolean
     isValid: boolean
 }
 
-function MetricBar({ label, current, target, min = 0, max = 1, isPercent = true, isValid }: MetricBarProps) {
+function MetricBar({
+    label,
+    current,
+    target,
+    min = 0,
+    max = 1,
+    isPercent = true,
+    targetLabel,
+    targetIsPercent = true,
+    isValid
+}: MetricBarProps) {
     const normalizedCurrent = Math.min(Math.max((current - min) / (max - min), 0), 1)
     const normalizedTarget = target !== undefined ? Math.min(Math.max((target - min) / (max - min), 0), 1) : undefined
 
     const displayValue = isPercent ? `${(current * 100).toFixed(1)}%` : current.toFixed(2)
+    const targetDisplay = target !== undefined
+        ? (targetIsPercent ? `${(target * 100).toFixed(1)}%` : target.toFixed(2))
+        : ''
 
     return (
         <div className="space-y-2">
@@ -73,6 +88,11 @@ function MetricBar({ label, current, target, min = 0, max = 1, isPercent = true,
                     />
                 )}
             </div>
+            {targetLabel && target !== undefined && (
+                <div className="text-xs text-slate-500">
+                    {targetLabel} {targetDisplay}
+                </div>
+            )}
         </div>
     )
 }
@@ -104,6 +124,8 @@ export function ValidationDashboard() {
                         target={structuralCheck.growthConsistency.impliedGrowth}
                         min={-0.1}
                         max={0.4}
+                        targetLabel="隐含增长率"
+                        targetIsPercent
                         isValid={structuralCheck.growthConsistency.isValid}
                     />
 
