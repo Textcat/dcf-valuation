@@ -7,7 +7,7 @@
  * Uses Damodaran industry benchmarks for feasibility checks.
  */
 
-import type { MarketImplied, ExtendedFinancialData } from '@/types'
+import type { MarketImplied, ExtendedFinancialData, DCFInputs } from '@/types'
 import {
     getIndustryBenchmark,
     getIndustryThresholds,
@@ -18,9 +18,39 @@ import {
  * Calculate market implied assumptions by reverse engineering
  * from the current stock price.
  */
+function computeReinvestmentRate(inputs: DCFInputs): number | null {
+    if (!inputs.drivers || inputs.drivers.length === 0) return null
+
+    const lastDriver = inputs.drivers[inputs.drivers.length - 1]
+    const lastNetNopatMargin = lastDriver.operatingMargin * (1 - lastDriver.taxRate)
+    const lastReinvestmentRate = lastNetNopatMargin > 0
+        ? (lastDriver.capexPercent - lastDriver.daPercent + lastDriver.wcChangePercent) / lastNetNopatMargin
+        : NaN
+
+    if (Number.isFinite(lastReinvestmentRate) && lastReinvestmentRate > 0) {
+        return lastReinvestmentRate
+    }
+
+    const avgOpMargin = inputs.drivers.reduce((sum, d) => sum + d.operatingMargin, 0) / inputs.drivers.length
+    const avgTaxRate = inputs.drivers.reduce((sum, d) => sum + d.taxRate, 0) / inputs.drivers.length
+    const avgCapex = inputs.drivers.reduce((sum, d) => sum + d.capexPercent, 0) / inputs.drivers.length
+    const avgDA = inputs.drivers.reduce((sum, d) => sum + d.daPercent, 0) / inputs.drivers.length
+    const avgWC = inputs.drivers.reduce((sum, d) => sum + d.wcChangePercent, 0) / inputs.drivers.length
+
+    const avgNetNopatMargin = avgOpMargin * (1 - avgTaxRate)
+    const avgReinvestmentRate = avgNetNopatMargin > 0
+        ? (avgCapex - avgDA + avgWC) / avgNetNopatMargin
+        : NaN
+
+    return Number.isFinite(avgReinvestmentRate) && avgReinvestmentRate > 0
+        ? avgReinvestmentRate
+        : null
+}
+
 export function calculateMarketImplied(
     financialData: ExtendedFinancialData,
-    wacc: number
+    wacc: number,
+    inputs: DCFInputs
 ): MarketImplied {
     const {
         currentPrice,
@@ -81,9 +111,9 @@ export function calculateMarketImplied(
     // -----------------------------------------
 
     // ROIC = Growth / Reinvestment Rate
-    // Assume typical reinvestment rate of 30-50%
-    const assumedReinvestmentRate = 0.4
-    const impliedROIC = impliedGrowthRate > 0
+    // Prefer company-specific reinvestment rate from DCF inputs; fallback to 40%
+    const assumedReinvestmentRate = computeReinvestmentRate(inputs) ?? 0.4
+    const impliedROIC = impliedGrowthRate > 0 && assumedReinvestmentRate > 0
         ? impliedGrowthRate / assumedReinvestmentRate
         : currentOpMargin * 0.8 * 2 // Fallback: margin * (1-tax) * asset turnover
 

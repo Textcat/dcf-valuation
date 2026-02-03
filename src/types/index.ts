@@ -270,10 +270,12 @@ export interface MonteCarloParams {
 
     // Driver distributions
     operatingMargin: {
-        mean: number
-        stdDev: number
-        min: number
-        max: number
+        means: number[]       // Base margin path (per year)
+        stdDev: number        // Shock stdDev (absolute)
+        min: number           // Floor for sampled margin
+        max: number           // Cap for sampled margin
+        yearCorrelation: number // AR(1) correlation across years
+        meanReversion: number  // Reversion strength toward base path (0-1)
     }
     wacc: {
         mean: number

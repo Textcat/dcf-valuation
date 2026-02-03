@@ -397,10 +397,28 @@ export function MonteCarloDashboard() {
                             <div className="text-slate-400">关键驱动分布</div>
                             <div className="bg-slate-800/50 rounded-xl p-4 space-y-2">
                                 <div className="flex justify-between">
-                                    <span className="text-slate-400">营业利润率</span>
+                                    <span className="text-slate-400">营业利润率均值路径</span>
                                     <span className="text-white">
-                                        {formatPercent(monteCarloParams.operatingMargin.mean)} ± {formatPercent(monteCarloParams.operatingMargin.stdDev)}
+                                        {monteCarloParams.operatingMargin.means.map(m => formatPercent(m)).join(' → ')}
                                     </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">营业利润率波动率</span>
+                                    <span className="text-white">{formatPercent(monteCarloParams.operatingMargin.stdDev)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">营业利润率范围</span>
+                                    <span className="text-white">
+                                        {formatRange(monteCarloParams.operatingMargin.min, monteCarloParams.operatingMargin.max)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">年际相关</span>
+                                    <span className="text-white">{monteCarloParams.operatingMargin.yearCorrelation.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">均值回归</span>
+                                    <span className="text-white">{monteCarloParams.operatingMargin.meanReversion.toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-slate-400">WACC ({monteCarloParams.wacc.distribution})</span>

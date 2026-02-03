@@ -178,6 +178,7 @@ export function createDefaultMonteCarloParams(
 ): MonteCarloParams {
     // Base values from driver path
     const growthPath = inputs.drivers.map(d => d.revenueGrowth)
+    const marginPath = inputs.drivers.map(d => d.operatingMargin)
     const year1 = inputs.drivers[0]
 
     // Default heuristic values
@@ -224,10 +225,12 @@ export function createDefaultMonteCarloParams(
             meanReversion: 0.35
         },
         operatingMargin: {
-            mean: year1.operatingMargin,
+            means: marginPath,
             stdDev: marginStdDev,
             min: 0.01,
-            max: 0.60
+            max: 0.60,
+            yearCorrelation: 0.5,
+            meanReversion: 0.35
         },
         wacc: {
             mean: inputs.wacc,
@@ -302,6 +305,9 @@ export function runMonteCarloSimulation(
     const growthMeans = params.growth.means.length > 0
         ? params.growth.means
         : baseInputs.drivers.map(d => d.revenueGrowth)
+    const marginMeans = params.operatingMargin.means.length > 0
+        ? params.operatingMargin.means
+        : baseInputs.drivers.map(d => d.operatingMargin)
     const maxAttempts = 25
     const dynamicBoundK = 3
 
@@ -362,17 +368,35 @@ export function runMonteCarloSimulation(
                 prevShock = shock
             }
 
-            const marginBounds = dynamicBounds(
-                params.operatingMargin.mean,
+            const marginPath: number[] = []
+            const firstMarginBounds = dynamicBounds(
+                marginMeans[0],
                 params.operatingMargin.stdDev,
                 params.operatingMargin.min,
                 params.operatingMargin.max
             )
-            const sampledOperatingMargin = clamp(
-                params.operatingMargin.mean + marginShock,
-                marginBounds.min,
-                marginBounds.max
+            let prevMargin = clamp(
+                marginMeans[0] + marginShock,
+                firstMarginBounds.min,
+                firstMarginBounds.max
             )
+            let prevMarginShock = params.operatingMargin.stdDev > 0 ? marginShock / params.operatingMargin.stdDev : 0
+            marginPath.push(prevMargin)
+
+            const marginYearCorr = clamp(params.operatingMargin.yearCorrelation, -0.9, 0.9)
+            const marginMeanReversion = clamp(params.operatingMargin.meanReversion, 0, 1)
+            const marginShockScale = Math.sqrt(1 - marginYearCorr * marginYearCorr)
+
+            for (let y = 1; y < baseInputs.explicitPeriodYears; y++) {
+                const mean = marginMeans[Math.min(y, marginMeans.length - 1)]
+                const bounds = dynamicBounds(mean, params.operatingMargin.stdDev, params.operatingMargin.min, params.operatingMargin.max)
+                const shock = marginYearCorr * prevMarginShock + marginShockScale * randomStandardNormal()
+                const blended = mean + (prevMargin - mean) * (1 - marginMeanReversion) + shock * params.operatingMargin.stdDev
+                const nextMargin = clamp(blended, bounds.min, bounds.max)
+                marginPath.push(nextMargin)
+                prevMargin = nextMargin
+                prevMarginShock = shock
+            }
 
             const sampledWaccRaw = params.wacc.distribution === 'lognormal'
                 ? sampleLogNormalFromZ(params.wacc.mean, params.wacc.stdDev, waccShock)
@@ -481,7 +505,7 @@ export function runMonteCarloSimulation(
                 drivers: baseInputs.drivers.map((driver, idx) => ({
                     ...driver,
                     revenueGrowth: growthPath[Math.min(idx, growthPath.length - 1)],
-                    operatingMargin: sampledOperatingMargin
+                    operatingMargin: marginPath[Math.min(idx, marginPath.length - 1)]
                 }))
             }
         }

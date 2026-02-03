@@ -300,7 +300,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         if (!dcfInputs || !dcfResult || !financialData) return
 
         const structuralCheck = runStructuralCheck(dcfInputs, dcfResult, financialData)
-        const marketImplied = calculateMarketImplied(financialData, dcfInputs.wacc)
+        const marketImplied = calculateMarketImplied(financialData, dcfInputs.wacc, dcfInputs)
 
         set({ structuralCheck, marketImplied })
     },
@@ -626,7 +626,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         set({ dcfResult: result })
 
         const structuralCheck = runStructuralCheck(dcfInputs, result, financialData)
-        const marketImplied = calculateMarketImplied(financialData, dcfInputs.wacc)
+        const marketImplied = calculateMarketImplied(financialData, dcfInputs.wacc, dcfInputs)
         set({ structuralCheck, marketImplied })
     }
 }))

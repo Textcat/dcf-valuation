@@ -201,7 +201,7 @@ describe('createDefaultMonteCarloParams', () => {
         const params = createDefaultMonteCarloParams(inputs)
 
         expect(params.growth.means[0]).toBe(inputs.drivers[0].revenueGrowth)
-        expect(params.operatingMargin.mean).toBe(inputs.drivers[0].operatingMargin)
+        expect(params.operatingMargin.means[0]).toBe(inputs.drivers[0].operatingMargin)
         expect(params.wacc.mean).toBe(inputs.wacc)
         expect(params.terminalGrowth.mean).toBe(inputs.terminalGrowthRate)
     })
