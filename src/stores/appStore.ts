@@ -63,6 +63,7 @@ interface AppStore {
     // Monte Carlo State
     monteCarloParams: MonteCarloParams | null
     isRunningMonteCarlo: boolean
+    monteCarloRunId: string | null
 
     // Actions
     loadSymbol: (symbol: string) => Promise<void>
@@ -145,6 +146,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     activeTab: 'input',
     monteCarloParams: null,
     isRunningMonteCarlo: false,
+    monteCarloRunId: null,
 
     // Load a new symbol
     loadSymbol: async (symbol: string) => {
@@ -257,6 +259,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
                 dcfResult: null,
                 structuralCheck: null,
                 marketImplied: null,
+                monteCarloResult: null,
+                monteCarloParams: null,
+                isRunningMonteCarlo: false,
+                monteCarloRunId: null,
                 isLoading: false
             })
         } catch (err) {
@@ -269,7 +275,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     // Update DCF inputs
     setDCFInputs: (inputs: DCFInputs) => {
-        set({ dcfInputs: inputs, dcfResult: null })
+        set({
+            dcfInputs: inputs,
+            dcfResult: null,
+            monteCarloResult: null,
+            monteCarloParams: null,
+            isRunningMonteCarlo: false,
+            monteCarloRunId: null
+        })
     },
 
     // Run DCF calculation
@@ -299,7 +312,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
     clearError: () => set({ error: null }),
 
     // Set Monte Carlo params
-    setMonteCarloParams: (params: MonteCarloParams) => set({ monteCarloParams: params }),
+    setMonteCarloParams: (params: MonteCarloParams) => set({
+        monteCarloParams: params,
+        monteCarloResult: null,
+        isRunningMonteCarlo: false,
+        monteCarloRunId: null
+    }),
 
     // Run Monte Carlo simulation using Web Worker
     runMonteCarlo: async () => {
@@ -309,7 +327,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
         // Create default params if not set (uses analyst dispersion when available)
         const params = monteCarloParams || createDefaultMonteCarloParams(dcfInputs, financialData)
 
-        set({ isRunningMonteCarlo: true, monteCarloParams: params })
+        const runId = crypto.randomUUID()
+
+        set({
+            isRunningMonteCarlo: true,
+            monteCarloParams: params,
+            monteCarloResult: null,
+            monteCarloRunId: runId
+        })
 
         try {
             // Check if Web Workers are supported
@@ -329,6 +354,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
                 worker.postMessage(workerInput)
 
                 worker.onmessage = (event: MessageEvent<MonteCarloWorkerOutput>) => {
+                    if (get().monteCarloRunId !== runId) {
+                        worker.terminate()
+                        return
+                    }
                     const { success, result, error, executionTimeMs } = event.data
                     if (success && result) {
                         console.log(`Monte Carlo completed in ${executionTimeMs?.toFixed(0)}ms`)
@@ -341,6 +370,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
                 }
 
                 worker.onerror = (error) => {
+                    if (get().monteCarloRunId !== runId) {
+                        worker.terminate()
+                        return
+                    }
                     console.error('Worker error:', error)
                     set({ isRunningMonteCarlo: false, error: 'Web Worker error' })
                     worker.terminate()
@@ -349,14 +382,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
                 // Fallback: run synchronously (may block UI)
                 console.warn('Web Workers not supported, running Monte Carlo synchronously')
                 const result = runMonteCarloSimulation(params, dcfInputs, financialData)
-                set({ monteCarloResult: result, isRunningMonteCarlo: false })
+                if (get().monteCarloRunId === runId) {
+                    set({ monteCarloResult: result, isRunningMonteCarlo: false })
+                }
             }
         } catch (err) {
             console.error('Monte Carlo error:', err)
-            set({
-                isRunningMonteCarlo: false,
-                error: err instanceof Error ? err.message : 'Monte Carlo simulation failed'
-            })
+            if (get().monteCarloRunId === runId) {
+                set({
+                    isRunningMonteCarlo: false,
+                    error: err instanceof Error ? err.message : 'Monte Carlo simulation failed'
+                })
+            }
         }
     },
 
@@ -371,6 +408,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         monteCarloResult: null,
         monteCarloParams: null,
         isRunningMonteCarlo: false,
+        monteCarloRunId: null,
         predictions: [],
         isLoadingPredictions: false,
         snapshots: [],
@@ -578,6 +616,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
             marketImplied: null,
             monteCarloResult: null,
             monteCarloParams: null,
+            isRunningMonteCarlo: false,
+            monteCarloRunId: null,
             activeTab: 'input'
         })
 
