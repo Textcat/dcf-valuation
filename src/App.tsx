@@ -2,13 +2,17 @@
  * Main App Component
  */
 
+import { useEffect, useState } from 'react'
+import type { Session } from '@supabase/supabase-js'
 import { TickerSearch } from '@/components/TickerSearch'
 import { FinancialOverview } from '@/components/FinancialOverview'
 import { DCFInputPanel } from '@/components/DCFInputPanel'
 import { ValidationDashboard } from '@/components/ValidationDashboard'
 import { MonteCarloDashboard } from '@/components/MonteCarloDashboard'
 import { SnapshotHistory } from '@/components/SnapshotHistory'
+import { AuthScreen } from '@/components/AuthScreen'
 import { useAppStore } from '@/stores/appStore'
+import { supabase } from '@/services/supabase'
 
 function App() {
     const {
@@ -17,8 +21,57 @@ function App() {
         error,
         clearError,
         activeTab,
-        setActiveTab
+        setActiveTab,
+        reset
     } = useAppStore()
+
+    const [session, setSession] = useState<Session | null>(null)
+    const [isAuthLoading, setIsAuthLoading] = useState(true)
+
+    useEffect(() => {
+        let isMounted = true
+        supabase.auth.getSession().then(({ data }) => {
+            if (!isMounted) return
+            setSession(data.session ?? null)
+            setIsAuthLoading(false)
+        })
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+            if (!isMounted) return
+            setSession(nextSession ?? null)
+            setIsAuthLoading(false)
+        })
+
+        return () => {
+            isMounted = false
+            subscription.unsubscribe()
+        }
+    }, [])
+
+    useEffect(() => {
+        if (!isAuthLoading && !session) {
+            reset()
+        }
+    }, [isAuthLoading, session, reset])
+
+    const handleSignOut = async () => {
+        await supabase.auth.signOut()
+    }
+
+    if (isAuthLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="glass-card p-12 text-center">
+                    <div className="inline-block w-12 h-12 border-4 border-blue-400 border-t-transparent rounded-full animate-spin mb-4" />
+                    <p className="text-slate-300">正在加载登录状态...</p>
+                </div>
+            </div>
+        )
+    }
+
+    if (!session) {
+        return <AuthScreen />
+    }
 
     return (
         <div className="min-h-screen p-6 md:p-10">
@@ -33,7 +86,20 @@ function App() {
                             三层验证闭环 · 快速可检验的估值系统
                         </p>
                     </div>
-                    <TickerSearch />
+                    <div className="flex flex-col md:flex-row md:items-center gap-3">
+                        <div className="text-xs text-slate-400 md:text-right">
+                            已登录: <span className="text-slate-200">{session.user.email}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <TickerSearch />
+                            <button
+                                onClick={handleSignOut}
+                                className="px-3 py-2 rounded-lg text-xs font-semibold bg-slate-800 text-slate-200 hover:bg-slate-700"
+                            >
+                                退出登录
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </header>
 
