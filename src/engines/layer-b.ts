@@ -11,6 +11,7 @@ import type {
     ExtendedFinancialData
 } from '@/types'
 import { calculateImpliedGrowth } from './dcf-engine'
+import { getIndustryBenchmark, getIndustryThresholds } from '@/data/industryBenchmarks'
 
 /**
  * Run structural consistency checks
@@ -32,8 +33,17 @@ export function runStructuralCheck(
         inputs.drivers.length
 
     // Use actual historical ROIC from financial data (more accurate than proxy)
-    // Clamp to reasonable range to avoid extreme values
-    const actualROIC = Math.max(0.05, Math.min(0.50, financialData.historicalROIC))
+    // Keep raw value; flag extremes via warning
+    const actualROIC = Number.isFinite(financialData.historicalROIC)
+        ? financialData.historicalROIC
+        : 0
+
+    const benchmark = getIndustryBenchmark(financialData.industry, financialData.sector)
+    const thresholds = getIndustryThresholds(benchmark)
+    const lowerExtreme = Math.min(-0.10, benchmark.afterTaxROIC - 0.30)
+    if (actualROIC > thresholds.roicError || actualROIC < lowerExtreme) {
+        warnings.push(`历史ROIC(${(actualROIC * 100).toFixed(1)}%)偏离行业常态，可能存在行业特例`)
+    }
 
     // Calculate average driver values for reinvestment rate
     const avgOpMargin = inputs.drivers.reduce((sum, d) => sum + d.operatingMargin, 0) /

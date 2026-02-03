@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useAppStore } from '@/stores/appStore'
 import type { DCFInputs, ValueDrivers } from '@/types'
+import { getIndustryBenchmark, getIndustryThresholds } from '@/data/industryBenchmarks'
 
 interface NumberInputProps {
     label: string
@@ -93,6 +94,14 @@ export function DCFInputPanel() {
 
     if (!dcfInputs || !financialData) return null
 
+    const benchmark = getIndustryBenchmark(financialData.industry, financialData.sector)
+    const thresholds = getIndustryThresholds(benchmark)
+    const lowerExtremeROIC = Math.min(-0.10, benchmark.afterTaxROIC - 0.30)
+    const steadyStateROICExtreme = dcfInputs.steadyStateROIC > thresholds.roicError
+    const historicalROICExtreme =
+        financialData.historicalROIC > thresholds.roicError ||
+        financialData.historicalROIC < lowerExtremeROIC
+
     const updateDriver = (index: number, driver: ValueDrivers) => {
         const newDrivers = [...dcfInputs.drivers]
         newDrivers[index] = driver
@@ -164,7 +173,7 @@ export function DCFInputPanel() {
                         value={dcfInputs.steadyStateROIC}
                         onChange={(v) => updateInput('steadyStateROIC', v)}
                         min={0.05}
-                        max={0.4}
+                        max={1.0}
                     />
                     <div className="flex flex-col">
                         <label className="text-xs text-slate-400 mb-1">终值方法</label>
@@ -181,6 +190,12 @@ export function DCFInputPanel() {
                     </div>
                 </div>
 
+                {steadyStateROICExtreme && (
+                    <div className="text-xs text-amber-400">
+                        稳态ROIC高于行业极值区间(&gt;{(thresholds.roicError * 100).toFixed(1)}%)，估值对护城河假设敏感
+                    </div>
+                )}
+
                 {/* Historical Ratios Info */}
                 <div className="text-xs text-slate-500 pt-2 border-t border-slate-700/50">
                     <span className="text-slate-400">历史比率 (年报): </span>
@@ -188,6 +203,11 @@ export function DCFInputPanel() {
                     CapEx/Rev = {(financialData.historicalCapexPercent * 100).toFixed(1)}% |
                     ROIC = {(financialData.historicalROIC * 100).toFixed(1)}%
                 </div>
+                {historicalROICExtreme && (
+                    <div className="text-xs text-amber-400">
+                        历史ROIC偏离行业常态，可能存在行业特例
+                    </div>
+                )}
             </div>
 
             {/* Yearly Drivers */}

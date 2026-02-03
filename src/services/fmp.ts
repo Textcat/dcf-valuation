@@ -557,9 +557,11 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
         const nopat = ttmOperatingIncome * (1 - effectiveTaxRate)
 
         if (investedCapital > 0) {
+            // Keep raw ROIC for analysis; surface extremes via UI/validation warnings
             historicalROIC = nopat / investedCapital
-            // Clamp to reasonable range (5% - 50%)
-            historicalROIC = Math.max(0.05, Math.min(0.50, historicalROIC))
+            if (!isFinite(historicalROIC)) {
+                historicalROIC = 0
+            }
         }
     }
 
