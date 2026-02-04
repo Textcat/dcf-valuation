@@ -27,3 +27,6 @@ npm-debug.log*
 
 # Type checking
 *.tsbuildinfo
+
+# Cloudflare
+.wrangler/
