@@ -290,19 +290,43 @@ async function fetchExchangeRate(currency: string): Promise<number> {
 // Main API Functions
 // ============================================================
 
-/** Search for stocks by query (uses search-name for company names) */
+/** Search for stocks by query (prioritize exact symbol matches via profile lookup) */
 export async function searchStocks(query: string): Promise<{ symbol: string; name: string }[]> {
-    if (!query || query.length < 1) return []
+    const normalizedQuery = query.trim()
+    if (!normalizedQuery) return []
 
-    const url = buildUrl('search-name', { query, limit: 10 })
-    const data = await fetchAndValidate<FMPSearchResult[]>(url)
+    const upperQuery = normalizedQuery.toUpperCase()
+    const shouldLookupExactSymbol = /^[A-Z0-9.\-]+$/.test(upperQuery) && upperQuery.length <= 10
 
-    if (!data) return []
+    const [nameData, profileData] = await Promise.all([
+        fetchAndValidate<FMPSearchResult[]>(buildUrl('search-name', { query: normalizedQuery, limit: 10 })),
+        shouldLookupExactSymbol
+            ? fetchAndValidate<FMPProfile[]>(buildUrl('profile', { symbol: upperQuery }))
+            : Promise.resolve(null)
+    ])
 
-    return data.map(item => ({
-        symbol: item.symbol,
-        name: item.name
-    }))
+    const results = new Map<string, { symbol: string; name: string }>()
+
+    if (profileData && profileData.length > 0) {
+        const profile = profileData[0]
+        results.set(profile.symbol, {
+            symbol: profile.symbol,
+            name: profile.companyName
+        })
+    }
+
+    if (nameData) {
+        for (const item of nameData) {
+            if (!results.has(item.symbol)) {
+                results.set(item.symbol, {
+                    symbol: item.symbol,
+                    name: item.name
+                })
+            }
+        }
+    }
+
+    return Array.from(results.values())
 }
 
 /** Fetch basic financial data for a symbol */
