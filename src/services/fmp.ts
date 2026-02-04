@@ -7,9 +7,9 @@
 
 import type { FinancialData, ExtendedFinancialData, AnalystEstimate, Percentiles } from '@/types'
 
-const FMP_API_KEY = 'mtAUFJCshqKGHEdg0CzD1kYlPooTtTwd'
 // New stable API uses query params instead of path params
 const FMP_BASE_URL = 'https://financialmodelingprep.com/stable'
+const FMP_PROXY_BASE_DEFAULT = '/api/fmp'
 
 // ============================================================
 // Helper Functions
@@ -27,12 +27,51 @@ function toNum(val: unknown): number {
 
 /** Build URL with query parameters */
 function buildUrl(endpoint: string, params: Record<string, string | number>): string {
-    const url = new URL(`${FMP_BASE_URL}/${endpoint}`)
-    url.searchParams.set('apikey', FMP_API_KEY)
+    const { baseUrl, apiKey } = resolveFmpConfig()
+    const normalizedBase = baseUrl.replace(/\/$/, '')
+    const path = `${normalizedBase}/${endpoint}`
+    const url = normalizedBase.startsWith('http')
+        ? new URL(path)
+        : new URL(path, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+
+    if (apiKey) {
+        url.searchParams.set('apikey', apiKey)
+    }
     for (const [key, value] of Object.entries(params)) {
         url.searchParams.set(key, String(value))
     }
     return url.toString()
+}
+
+function resolveFmpConfig(): { baseUrl: string; apiKey?: string } {
+    const runtimeEnv = getRuntimeEnv()
+    const viteProxyBase = typeof import.meta !== 'undefined' ? (import.meta as ImportMeta).env?.VITE_FMP_PROXY_BASE : undefined
+    const proxyBase = viteProxyBase ?? runtimeEnv?.FMP_PROXY_BASE
+    const apiKey = runtimeEnv?.FMP_API_KEY
+    const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined'
+
+    if (isBrowser) {
+        return {
+            baseUrl: proxyBase ?? FMP_PROXY_BASE_DEFAULT
+        }
+    }
+
+    if (proxyBase) {
+        return { baseUrl: proxyBase }
+    }
+
+    if (apiKey) {
+        return { baseUrl: FMP_BASE_URL, apiKey }
+    }
+
+    return { baseUrl: FMP_PROXY_BASE_DEFAULT }
+}
+
+function getRuntimeEnv(): Record<string, string | undefined> | null {
+    const globalRef = typeof globalThis !== 'undefined' ? (globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }) : undefined
+    const env = globalRef?.process?.env
+    if (!env || typeof env !== 'object') return null
+    return env
 }
 
 /** Fetch and validate JSON response */

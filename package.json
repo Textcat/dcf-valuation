@@ -5,6 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
+        "dev:cf": "npx wrangler pages dev --proxy 127.0.0.1:5173 --local ./.cf-pages",
         "build": "tsc -b && vite build",
         "lint": "eslint .",
         "preview": "vite preview",

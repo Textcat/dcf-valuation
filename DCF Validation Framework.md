@@ -297,7 +297,7 @@ FMP确实提供了丰富的分析师预测数据！除了 EPS/Revenue，还有 *
 
 ### User Input
 
-开始吧，这是我的 FMP key：mtAUFJCshqKGHEdg0CzD1kYlPooTtTwd
+开始吧，这是我的 FMP key：（已移除）
 
 *Edited relevant file*
 
