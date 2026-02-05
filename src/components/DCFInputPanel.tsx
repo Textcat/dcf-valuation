@@ -94,10 +94,9 @@ function DriverRow({
     }
 
     return (
-        <div className="grid grid-cols-7 gap-2 items-center py-2 border-b border-slate-700/30">
+        <div className="grid grid-cols-6 gap-2 items-center py-2 border-b border-slate-700/30">
             <div className="text-sm font-semibold text-blue-400">Year {year}</div>
             <NumberInput label="收入增速" value={driver.revenueGrowth} onChange={(v) => update('revenueGrowth', v)} max={1} />
-            <NumberInput label="毛利率" value={driver.grossMargin} onChange={(v) => update('grossMargin', v)} />
             <NumberInput label="营业利润率" value={driver.operatingMargin} onChange={(v) => update('operatingMargin', v)} />
             <NumberInput label="D&A %" value={driver.daPercent} onChange={(v) => update('daPercent', v)} max={0.2} />
             <NumberInput label="CapEx %" value={driver.capexPercent} onChange={(v) => update('capexPercent', v)} max={0.3} />
