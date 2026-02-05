@@ -109,7 +109,7 @@ src/
 - 若你在其他环境部署，请确保提供等价的 FMP 代理或在服务端设置 `FMP_API_KEY`。
 
 ## License
-TBD
+MIT
 
 ---
 
@@ -212,4 +212,4 @@ src/
 - For other deployments, provide an equivalent proxy or set `FMP_API_KEY` server-side.
 
 ### License
-TBD
+MIT
