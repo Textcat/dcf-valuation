@@ -8,6 +8,10 @@
 版本历史
 | 版本ID | 日期 | 摘要 | 参考实现 |
 |---|---|---|---|
+| v2026-02-05-1111 | 2026-02-05 11:11 | DCF 输入面板移除“毛利率”输入列；驱动区列数调整 | `src/components/DCFInputPanel.tsx` |
+| v2026-02-05-1109 | 2026-02-05 11:09 | 合并 `codex/revenuegrowthfmp`；主干引入 FY-based 收入增速与基期收入来源改动（见 v2026-02-05-1108） | `src/services/fmp.ts` `src/stores/appStore.ts` `src/components/DCFInputPanel.tsx` `src/types/index.ts` `scripts/run-valuation.ts` |
+| v2026-02-05-1108 | 2026-02-05 11:08 | 基期收入改为“最近年报优先，TTM 兜底”；分析师收入预测按日期排序并过滤到最新年报之后；FY1–FY5 逐年映射用于显式期收入增速；新增 latestAnnualRevenue/latestAnnualNetIncome 字段；CLI 与测试同步 | `src/services/fmp.ts` `src/stores/appStore.ts` `src/components/DCFInputPanel.tsx` `src/types/index.ts` `scripts/run-valuation.ts` `src/__tests__/monte-carlo.test.ts` |
+| v2026-02-05-1014 | 2026-02-05 10:14 | 收入增速改为“逐年估算 + 缺失递减兜底”，并将分析师估算扩展到 FY1–FY5 | `src/stores/appStore.ts` `scripts/run-valuation.ts` `src/services/fmp.ts` `src/types/index.ts` |
 | v2026-02-05 | 2026-02-05 | 建立全量公式与参数溯源文档（显式期 + 三种终值 + WACC + 数据来源） | `src/engines/dcf-engine.ts` `src/stores/appStore.ts` `src/services/fmp.ts` |
 
 范围与实现位置
@@ -77,6 +81,11 @@ TTM 比率
 - operatingMargin = ttmOperatingIncome / ttmRevenue
 - netMargin = ttmNetIncome / ttmRevenue
 - ttmEPS = ttmNetIncome / sharesOutstanding
+
+最新年报数据 (annual income-statement)
+- latestAnnualRevenue = latestAnnual.revenue × exchangeRate
+- latestAnnualNetIncome = latestAnnual.netIncome × exchangeRate
+- latestAnnualDate = latestAnnual.date (用于筛选分析师估算起点)
 
 有效税率 (annual income-statement)
 - 对每个年度: taxRate_i = incomeTaxExpense_i / incomeBeforeTax_i
@@ -158,8 +167,8 @@ DCF 输入参数 (DCFInputs) 与来源
 |---|---|---|---|
 | symbol | 用户输入 | - | 股票代码 |
 | explicitPeriodYears | 默认值 | - | 5 |
-| baseRevenue | 自动 | income-statement (quarter) | baseRevenue = ttmRevenue |
-| baseNetIncome | 自动 | income-statement (quarter) | baseNetIncome = ttmNetIncome；当前未参与 DCF 引擎计算 |
+| baseRevenue | 自动 | income-statement (annual 或 quarter) | baseRevenue = latestAnnualRevenue；若 latestAnnualRevenue <= 0 则回退 ttmRevenue |
+| baseNetIncome | 自动 | income-statement (annual 或 quarter) | baseNetIncome = latestAnnualNetIncome；若 latestAnnualNetIncome <= 0 则回退 ttmNetIncome；当前未参与 DCF 引擎计算 |
 
 WACC 与终值参数
 | 参数 | 来源类型 | 来源端口/字段 | 计算/规则 |
@@ -175,7 +184,7 @@ WACC 与终值参数
 显式期驱动因子 (drivers[y])
 | 参数 | 来源类型 | 来源端口/字段 | 计算/规则 |
 |---|---|---|---|
-| revenueGrowth | 自动或默认 | analyst-estimates | 若 FY1/FY2 revenueAvg > 0: growth = FY2.revenueAvg/FY1.revenueAvg - 1；year1..5 = g, 0.9g, 0.8g, 0.7g, 0.6g。否则默认 0.10 |
+| revenueGrowth | 自动或默认 | analyst-estimates | 先按估算 date 升序排序，并过滤为“最新年报日期之后”的估算；取 FY1–FY5 映射到显式期。若 baseRevenue > 0 且存在 FYi revenueAvg：growth_i = revenueAvg_i / prevRevenue - 1（prevRevenue 初始为 baseRevenue，逐年更新）；若某年缺失估算，则使用上一年 growth × 0.9 递减兜底；若 baseRevenue 缺失且 FY1/FY2 可得，则回退 growth = FY2/FY1 - 1 并按 0.9 递减。否则默认 0.10 |
 | grossMargin | 自动或默认 | income-statement (quarter) | ttmGrossProfit / ttmRevenue (若 >0，否则默认 0.40)；当前未参与 FCF 计算 |
 | operatingMargin | 自动或默认 | income-statement (quarter) | ttmOperatingIncome / ttmRevenue (若 >0，否则默认 0.20) |
 | taxRate | 自动或默认 | income-statement (annual) | effectiveTaxRate (若不可得，则默认 0.21) |
