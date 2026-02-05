@@ -58,7 +58,9 @@ async function buildInputs(symbol: string): Promise<{ inputs: DCFInputs; data: N
     const calculatedWACC = equityWeight * costOfEquity + debtWeight * costOfDebt * (1 - taxRate)
     const wacc = clamp(calculatedWACC, 0.06, 0.15)
 
-    const dcfInputs = createDefaultDCFInputs(symbol, data.ttmRevenue, data.ttmNetIncome)
+    const baseRevenue = data.latestAnnualRevenue > 0 ? data.latestAnnualRevenue : data.ttmRevenue
+    const baseNetIncome = data.latestAnnualNetIncome > 0 ? data.latestAnnualNetIncome : data.ttmNetIncome
+    const dcfInputs = createDefaultDCFInputs(symbol, baseRevenue, baseNetIncome)
     dcfInputs.wacc = wacc
     dcfInputs.steadyStateROIC = data.historicalROIC
 

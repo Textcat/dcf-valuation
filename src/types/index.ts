@@ -35,6 +35,10 @@ export interface ExtendedFinancialData extends FinancialData {
     // Analyst Estimates (FY1-FY5)
     analystEstimates: AnalystEstimate[]
 
+    // Latest annuals (for FY-based projections)
+    latestAnnualRevenue: number
+    latestAnnualNetIncome: number
+
     // Balance Sheet
     totalCash: number
     totalDebt: number

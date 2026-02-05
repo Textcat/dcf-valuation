@@ -207,8 +207,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
             // ============================================================
             const dcfInputs = createDefaultDCFInputs(
                 symbol,
-                data.ttmRevenue,
-                data.ttmNetIncome
+                data.latestAnnualRevenue > 0 ? data.latestAnnualRevenue : data.ttmRevenue,
+                data.latestAnnualNetIncome > 0 ? data.latestAnnualNetIncome : data.ttmNetIncome
             )
 
             // Set calculated WACC

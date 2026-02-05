@@ -97,6 +97,8 @@ function createMockFinancialData(): ExtendedFinancialData {
         sharesOutstanding: 2000000000,
         exchangeRate: 1,
         analystEstimates: [],
+        latestAnnualRevenue: 950000000,
+        latestAnnualNetIncome: 150000000,
         totalCash: 50000000000,
         totalDebt: 30000000000,
         netCash: 20000000000,
