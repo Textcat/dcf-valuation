@@ -60,6 +60,26 @@ function NumberInput({
     )
 }
 
+function formatNumber(value: number, decimals = 2): string {
+    const isNegative = value < 0
+    const absValue = Math.abs(value)
+    let formatted: string
+
+    if (absValue >= 1e12) {
+        formatted = `$${(absValue / 1e12).toFixed(decimals)}T`
+    } else if (absValue >= 1e9) {
+        formatted = `$${(absValue / 1e9).toFixed(decimals)}B`
+    } else if (absValue >= 1e6) {
+        formatted = `$${(absValue / 1e6).toFixed(decimals)}M`
+    } else if (absValue >= 1e3) {
+        formatted = `$${(absValue / 1e3).toFixed(decimals)}K`
+    } else {
+        formatted = `$${absValue.toFixed(decimals)}`
+    }
+
+    return isNegative ? `-${formatted}` : formatted
+}
+
 function DriverRow({
     year,
     driver,
@@ -101,6 +121,7 @@ export function DCFInputPanel() {
     const historicalROICExtreme =
         financialData.historicalROIC > thresholds.roicError ||
         financialData.historicalROIC < lowerExtremeROIC
+    const baseRevenueSource = financialData.latestAnnualRevenue > 0 ? '年报' : 'TTM'
 
     const updateDriver = (index: number, driver: ValueDrivers) => {
         const newDrivers = [...dcfInputs.drivers]
@@ -197,11 +218,17 @@ export function DCFInputPanel() {
                 )}
 
                 {/* Historical Ratios Info */}
-                <div className="text-xs text-slate-500 pt-2 border-t border-slate-700/50">
-                    <span className="text-slate-400">历史比率 (年报): </span>
-                    D&A/Rev = {(financialData.historicalDAPercent * 100).toFixed(1)}% |
-                    CapEx/Rev = {(financialData.historicalCapexPercent * 100).toFixed(1)}% |
-                    ROIC = {(financialData.historicalROIC * 100).toFixed(1)}%
+                <div className="text-xs text-slate-500 pt-2 border-t border-slate-700/50 space-y-1">
+                    <div>
+                        <span className="text-slate-400">历史比率 (年报): </span>
+                        D&A/Rev = {(financialData.historicalDAPercent * 100).toFixed(1)}% |
+                        CapEx/Rev = {(financialData.historicalCapexPercent * 100).toFixed(1)}% |
+                        ROIC = {(financialData.historicalROIC * 100).toFixed(1)}%
+                    </div>
+                    <div>
+                        <span className="text-slate-400">基期收入 ({baseRevenueSource}): </span>
+                        {formatNumber(dcfInputs.baseRevenue)}
+                    </div>
                 </div>
                 {historicalROICExtreme && (
                     <div className="text-xs text-amber-400">

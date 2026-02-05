@@ -25,6 +25,13 @@ function toNum(val: unknown): number {
     return 0
 }
 
+/** Parse YYYY-MM-DD date to ms, returning null on invalid */
+function toDateMs(dateStr?: string | null): number | null {
+    if (!dateStr) return null
+    const parsed = Date.parse(dateStr)
+    return Number.isFinite(parsed) ? parsed : null
+}
+
 /** Build URL with query parameters */
 function buildUrl(endpoint: string, params: Record<string, string | number>): string {
     const { baseUrl, apiKey } = resolveFmpConfig()
@@ -518,6 +525,17 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
     const operatingMargin = ttmRevenue > 0 ? ttmOperatingIncome / ttmRevenue : 0
     const netMargin = ttmRevenue > 0 ? ttmNetIncome / ttmRevenue : 0
 
+    // Latest annual figures (for FY-based projections)
+    let latestAnnualRevenue = 0
+    let latestAnnualNetIncome = 0
+    let latestAnnualDateMs: number | null = null
+    if (incomeAnnualData && incomeAnnualData.length > 0) {
+        const latestAnnual = incomeAnnualData[0]
+        latestAnnualRevenue = toNum(latestAnnual.revenue) * exchangeRate
+        latestAnnualNetIncome = toNum(latestAnnual.netIncome) * exchangeRate
+        latestAnnualDateMs = toDateMs(latestAnnual.date)
+    }
+
     // ============================================================
     // Calculate Effective Tax Rate (from annual data)
     // ============================================================
@@ -644,9 +662,30 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
 
     const analystEstimates: AnalystEstimate[] = []
     if (analystData && analystData.length > 0) {
-        const reversed = [...analystData].reverse()
-        for (let i = 0; i < Math.min(3, reversed.length); i++) {
-            const est = reversed[i]
+        const sorted = [...analystData].sort((a, b) => {
+            const aMs = toDateMs(a.date) ?? 0
+            const bMs = toDateMs(b.date) ?? 0
+            return aMs - bMs
+        })
+
+        let filtered = sorted
+        if (latestAnnualDateMs != null) {
+            filtered = sorted.filter((est) => {
+                const estMs = toDateMs(est.date)
+                return estMs != null && estMs > latestAnnualDateMs
+            })
+        }
+
+        let selected: FMPAnalystEstimate[] = []
+        if (filtered.length > 0) {
+            selected = filtered.slice(0, 5)
+        } else {
+            // Fallback: use most recent entries if filtering removes everything
+            selected = sorted.slice(-5)
+        }
+
+        for (let i = 0; i < selected.length; i++) {
+            const est = selected[i]
             analystEstimates.push({
                 fiscalYear: `FY${i + 1}`,
                 epsLow: toNum(est.epsLow) * exchangeRate,
@@ -734,6 +773,8 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
 
         // Extended data
         analystEstimates,
+        latestAnnualRevenue,
+        latestAnnualNetIncome,
         totalCash,
         totalDebt,
         netCash: totalCash - totalDebt,

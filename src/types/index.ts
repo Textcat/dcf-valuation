@@ -32,8 +32,12 @@ export interface FinancialData {
 
 /** Extended financial data with analyst estimates and historical metrics */
 export interface ExtendedFinancialData extends FinancialData {
-    // Analyst Estimates (FY1-FY3)
+    // Analyst Estimates (FY1-FY5)
     analystEstimates: AnalystEstimate[]
+
+    // Latest annuals (for FY-based projections)
+    latestAnnualRevenue: number
+    latestAnnualNetIncome: number
 
     // Balance Sheet
     totalCash: number
