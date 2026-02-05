@@ -78,7 +78,42 @@ export function runStructuralCheck(
     }
 
     // -----------------------------------------
-    // 2. CapEx/D&A Ratio Check
+    // 2. Terminal Bridging Check (Reinvestment Consistency)
+    // Explicit last-year reinvestment vs terminal g/ROIC
+    // -----------------------------------------
+
+    if (inputs.terminalMethod === 'roic-driven' || inputs.terminalMethod === 'fade') {
+        const lastDriver = inputs.drivers[inputs.drivers.length - 1]
+        const lastProjection = result.projections[result.projections.length - 1]
+        const prevRevenue = result.projections.length > 1
+            ? result.projections[result.projections.length - 2].revenue
+            : inputs.baseRevenue
+        const deltaRevenue = lastProjection.revenue - prevRevenue
+
+        const lastCapex = lastProjection.revenue * lastDriver.capexPercent
+        const lastDA = lastProjection.revenue * lastDriver.daPercent
+        const lastWCChange = deltaRevenue * lastDriver.wcChangePercent
+
+        const explicitReinvestment = lastProjection.nopat > 0
+            ? (lastCapex - lastDA + lastWCChange) / lastProjection.nopat
+            : 0
+
+        const terminalReinvestment = inputs.steadyStateROIC > 0.001
+            ? inputs.terminalGrowthRate / inputs.steadyStateROIC
+            : 0
+
+        const reinvestmentGap = Math.abs(explicitReinvestment - terminalReinvestment)
+        const reinvestmentGapThreshold = 0.10 // 10 percentage points
+
+        if (reinvestmentGap > reinvestmentGapThreshold) {
+            warnings.push(
+                `终值再投资率(g/ROIC=${(terminalReinvestment * 100).toFixed(0)}%)与显式期末再投资率(${(explicitReinvestment * 100).toFixed(0)}%)差异过大，终值衔接可能跳变`
+            )
+        }
+    }
+
+    // -----------------------------------------
+    // 3. CapEx/D&A Ratio Check
     // Should approach 1.0 in steady state
     // -----------------------------------------
 
@@ -99,7 +134,7 @@ export function runStructuralCheck(
     }
 
     // -----------------------------------------
-    // 3. FCF to Net Income Quality Check
+    // 4. FCF to Net Income Quality Check
     // -----------------------------------------
 
     const lastProjection = result.projections[result.projections.length - 1]
@@ -120,7 +155,7 @@ export function runStructuralCheck(
     }
 
     // -----------------------------------------
-    // 4. Terminal Value Percentage Check
+    // 5. Terminal Value Percentage Check
     // -----------------------------------------
 
     if (result.terminalValuePercent > 80) {
@@ -128,7 +163,7 @@ export function runStructuralCheck(
     }
 
     // -----------------------------------------
-    // 5. WACC vs Terminal Growth Check
+    // 6. WACC vs Terminal Growth Check
     // -----------------------------------------
 
     if (inputs.terminalGrowthRate >= inputs.wacc) {
