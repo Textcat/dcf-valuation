@@ -645,7 +645,7 @@ export async function fetchExtendedFinancialData(symbol: string): Promise<Extend
     const analystEstimates: AnalystEstimate[] = []
     if (analystData && analystData.length > 0) {
         const reversed = [...analystData].reverse()
-        for (let i = 0; i < Math.min(3, reversed.length); i++) {
+        for (let i = 0; i < Math.min(5, reversed.length); i++) {
             const est = reversed[i]
             analystEstimates.push({
                 fiscalYear: `FY${i + 1}`,

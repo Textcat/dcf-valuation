@@ -232,8 +232,32 @@ export const useAppStore = create<AppStore>((set, get) => ({
                 d.wcChangePercent = data.historicalWCChangePercent
             })
 
-            // Estimate growth from analyst estimates (with fade)
-            if (data.analystEstimates.length >= 2) {
+            // Estimate growth from analyst estimates (per-year when available)
+            const explicitYears = Math.min(dcfInputs.explicitPeriodYears, dcfInputs.drivers.length)
+            const estimates = data.analystEstimates.slice(0, explicitYears)
+            if (estimates.length > 0 && dcfInputs.baseRevenue > 0) {
+                let prevRevenue = dcfInputs.baseRevenue
+                for (let i = 0; i < explicitYears; i++) {
+                    const est = estimates[i]
+                    let growth: number | null = null
+                    if (est && est.revenueAvg > 0 && prevRevenue > 0) {
+                        growth = (est.revenueAvg / prevRevenue) - 1
+                        prevRevenue = est.revenueAvg
+                    } else if (i > 0) {
+                        growth = dcfInputs.drivers[i - 1].revenueGrowth * 0.9
+                        prevRevenue = prevRevenue * (1 + growth)
+                    }
+                    if (growth != null && isFinite(growth)) {
+                        dcfInputs.drivers[i].revenueGrowth = growth
+                    }
+                }
+                // Fade Model: 起始增长率 = 显式期最后一年增长率
+                const lastIdx = Math.min(explicitYears, dcfInputs.drivers.length) - 1
+                if (lastIdx >= 0) {
+                    dcfInputs.fadeStartGrowth = dcfInputs.drivers[lastIdx].revenueGrowth
+                }
+            } else if (data.analystEstimates.length >= 2) {
+                // Fallback: use FY2/FY1 growth and decay if base revenue is unavailable
                 const fy1Rev = data.analystEstimates[0].revenueAvg
                 const fy2Rev = data.analystEstimates[1].revenueAvg
                 if (fy1Rev > 0 && fy2Rev > 0) {
@@ -243,8 +267,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
                     dcfInputs.drivers[2].revenueGrowth = growth * 0.8
                     dcfInputs.drivers[3].revenueGrowth = growth * 0.7
                     dcfInputs.drivers[4].revenueGrowth = growth * 0.6
-
-                    // Fade Model: 起始增长率 = 显式期最后一年增长率
                     dcfInputs.fadeStartGrowth = growth * 0.6
                 }
             }

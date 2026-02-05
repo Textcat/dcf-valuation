@@ -71,7 +71,29 @@ async function buildInputs(symbol: string): Promise<{ inputs: DCFInputs; data: N
         d.wcChangePercent = data.historicalWCChangePercent
     })
 
-    if (data.analystEstimates.length >= 2) {
+    const explicitYears = Math.min(dcfInputs.explicitPeriodYears, dcfInputs.drivers.length)
+    const estimates = data.analystEstimates.slice(0, explicitYears)
+    if (estimates.length > 0 && dcfInputs.baseRevenue > 0) {
+        let prevRevenue = dcfInputs.baseRevenue
+        for (let i = 0; i < explicitYears; i++) {
+            const est = estimates[i]
+            let growth: number | null = null
+            if (est && est.revenueAvg > 0 && prevRevenue > 0) {
+                growth = (est.revenueAvg / prevRevenue) - 1
+                prevRevenue = est.revenueAvg
+            } else if (i > 0) {
+                growth = dcfInputs.drivers[i - 1].revenueGrowth * 0.9
+                prevRevenue = prevRevenue * (1 + growth)
+            }
+            if (growth != null && isFinite(growth)) {
+                dcfInputs.drivers[i].revenueGrowth = growth
+            }
+        }
+        const lastIdx = Math.min(explicitYears, dcfInputs.drivers.length) - 1
+        if (lastIdx >= 0) {
+            dcfInputs.fadeStartGrowth = dcfInputs.drivers[lastIdx].revenueGrowth
+        }
+    } else if (data.analystEstimates.length >= 2) {
         const fy1Rev = data.analystEstimates[0].revenueAvg
         const fy2Rev = data.analystEstimates[1].revenueAvg
         if (fy1Rev > 0 && fy2Rev > 0) {
