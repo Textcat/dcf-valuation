@@ -80,6 +80,10 @@ function formatNumber(value: number, decimals = 2): string {
     return isNegative ? `-${formatted}` : formatted
 }
 
+function formatPercent(value: number): string {
+    return `${(value * 100).toFixed(1)}%`
+}
+
 function DriverRow({
     year,
     driver,
@@ -125,7 +129,9 @@ export function DCFInputPanel() {
     const updateDriver = (index: number, driver: ValueDrivers) => {
         const newDrivers = [...dcfInputs.drivers]
         newDrivers[index] = driver
-        setDCFInputs({ ...dcfInputs, drivers: newDrivers })
+        const lastIdx = Math.min(dcfInputs.explicitPeriodYears, newDrivers.length) - 1
+        const fadeStartGrowth = lastIdx >= 0 ? newDrivers[lastIdx].revenueGrowth : dcfInputs.fadeStartGrowth
+        setDCFInputs({ ...dcfInputs, drivers: newDrivers, fadeStartGrowth })
     }
 
     const updateInput = <K extends keyof DCFInputs>(key: K, value: DCFInputs[K]) => {
@@ -209,6 +215,18 @@ export function DCFInputPanel() {
                         </select>
                     </div>
                 </div>
+
+                {dcfInputs.terminalMethod === 'fade' && (
+                    <div className="rounded-lg border border-slate-700/50 bg-slate-800/40 px-3 py-2">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-slate-400">渐退起始增长 (Fade)</span>
+                            <span className="text-white font-semibold">{formatPercent(dcfInputs.fadeStartGrowth)}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                            基于显式期最后一年收入增速
+                        </div>
+                    </div>
+                )}
 
                 {steadyStateROICExtreme && (
                     <div className="text-xs text-amber-400">
