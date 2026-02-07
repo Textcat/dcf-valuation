@@ -6,7 +6,7 @@ Cloudflare Worker backend for agent-friendly DCF valuation.
 - `POST /v1/valuation`: aggregated DCF + Layer B/C + Monte Carlo
 - Multi-key auth (`AGENT_API_KEYS` with `AGENT_API_KEY` fallback)
 - OpenAPI endpoints (`/openapi.json`, `/openapi.yaml`)
-- Core valuation logic imported from `@dcf/core`
+- Core valuation logic imported from `@textcat/dcf-core`
 
 ## Local Setup
 ```bash

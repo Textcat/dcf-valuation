@@ -3,7 +3,7 @@ import type {
     ExtendedFinancialData,
     Percentiles,
     WACCInputs
-} from '@dcf/core'
+} from '@textcat/dcf-core'
 
 const FMP_BASE_URL = 'https://financialmodelingprep.com/stable'
 const WACC_CACHE_DURATION_MS = 60 * 60 * 1000

@@ -108,7 +108,7 @@ src/
 
 ## 独立后端项目（Agent API）
 - 路径：`dcf-agent-api`
-- 核心复用包：`packages/dcf-core`（`@dcf/core`，版本 `0.1.0`）
+- 核心复用包：`packages/dcf-core`（`@textcat/dcf-core`，版本 `0.1.0`）
 - API：`POST /v1/valuation`、`GET /healthz`、`GET /openapi.json`、`GET /openapi.yaml`
 - 文档：`dcf-agent-api/docs/AI_AGENT_API.md`
 

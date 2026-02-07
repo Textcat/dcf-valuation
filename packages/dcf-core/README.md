@@ -1,4 +1,4 @@
-# @dcf/core
+# @textcat/dcf-core
 
 Shared valuation core package extracted from `dcf-valuation`.
 

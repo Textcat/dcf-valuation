@@ -1,5 +1,5 @@
 {
-  "name": "@dcf/core",
+  "name": "@textcat/dcf-core",
   "version": "0.1.0",
   "private": false,
   "type": "module",

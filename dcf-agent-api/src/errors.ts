@@ -1,9 +1,11 @@
+export type HttpErrorStatus = 400 | 401 | 404 | 422 | 500
+
 export class HttpError extends Error {
-    readonly status: number
+    readonly status: HttpErrorStatus
     readonly code: string
     readonly details?: unknown
 
-    constructor(status: number, code: string, message: string, details?: unknown) {
+    constructor(status: HttpErrorStatus, code: string, message: string, details?: unknown) {
         super(message)
         this.status = status
         this.code = code

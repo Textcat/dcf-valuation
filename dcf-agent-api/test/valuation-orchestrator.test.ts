@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ExtendedFinancialData } from '@dcf/core'
+import type { ExtendedFinancialData } from '@textcat/dcf-core'
 import { runValuation } from '../src/services/valuation-orchestrator'
 
 function createMockFinancialData(): ExtendedFinancialData {

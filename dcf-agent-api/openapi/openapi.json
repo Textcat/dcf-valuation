@@ -3,51 +3,416 @@
   "info": {
     "title": "DCF Agent API",
     "version": "1.0.0",
-    "description": "Aggregated DCF valuation API for AI agents."
+    "description": "Aggregated DCF valuation API for AI agents"
   },
-  "paths": {
-    "/healthz": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Service health"
+  "components": {
+    "schemas": {
+      "ValuationResponse": {
+        "type": "object",
+        "properties": {
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "symbol": {
+                "type": "string"
+              },
+              "companyName": {
+                "type": "string"
+              },
+              "generatedAt": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string"
+              },
+              "coreVersion": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "requestId",
+              "symbol",
+              "companyName",
+              "generatedAt",
+              "apiVersion",
+              "coreVersion"
+            ]
+          },
+          "effectiveInputs": {
+            "type": "object",
+            "properties": {
+              "dcfInputs": {},
+              "monteCarloByMethod": {
+                "type": "object",
+                "properties": {
+                  "perpetuity": {},
+                  "roicDriven": {},
+                  "fade": {}
+                }
+              }
+            },
+            "required": [
+              "monteCarloByMethod"
+            ]
+          },
+          "results": {
+            "type": "object",
+            "properties": {
+              "perpetuity": {
+                "type": "object",
+                "properties": {
+                  "dcf": {},
+                  "layerB": {},
+                  "monteCarlo": {}
+                }
+              },
+              "roicDriven": {
+                "type": "object",
+                "properties": {
+                  "dcf": {},
+                  "layerB": {},
+                  "monteCarlo": {}
+                }
+              },
+              "fade": {
+                "type": "object",
+                "properties": {
+                  "dcf": {},
+                  "layerB": {},
+                  "monteCarlo": {}
+                }
+              }
+            },
+            "required": [
+              "perpetuity",
+              "roicDriven",
+              "fade"
+            ]
+          },
+          "validation": {
+            "type": "object",
+            "properties": {
+              "layerC": {}
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "meta",
+          "effectiveInputs",
+          "results",
+          "validation",
+          "warnings"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "details": {}
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "DriverOverride": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  3
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  4
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  5
+                ]
+              }
+            ],
+            "example": 2
+          },
+          "revenueGrowth": {
+            "type": "number"
+          },
+          "operatingMargin": {
+            "type": "number"
+          },
+          "taxRate": {
+            "type": "number"
+          },
+          "daPercent": {
+            "type": "number"
+          },
+          "capexPercent": {
+            "type": "number"
+          },
+          "wcChangePercent": {
+            "type": "number"
+          },
+          "grossMargin": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "year"
+        ]
+      },
+      "DCFOverrides": {
+        "type": "object",
+        "properties": {
+          "wacc": {
+            "type": "number"
+          },
+          "terminalGrowthRate": {
+            "type": "number"
+          },
+          "steadyStateROIC": {
+            "type": "number"
+          },
+          "fadeYears": {
+            "type": "integer"
+          },
+          "fadeStartGrowth": {
+            "type": "number"
+          },
+          "fadeStartROIC": {
+            "type": "number"
+          },
+          "explicitPeriodYears": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "baseRevenue": {
+            "type": "number"
+          },
+          "baseNetIncome": {
+            "type": "number"
+          },
+          "drivers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriverOverride"
+            }
           }
         }
+      },
+      "MonteCarloOverrides": {
+        "type": "object",
+        "properties": {
+          "iterations": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        }
+      },
+      "AgentValuationOverrides": {
+        "type": "object",
+        "properties": {
+          "dcf": {
+            "$ref": "#/components/schemas/DCFOverrides"
+          },
+          "monteCarlo": {
+            "$ref": "#/components/schemas/MonteCarloOverrides"
+          }
+        }
+      },
+      "ValuationRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "example": "AAPL"
+          },
+          "overrides": {
+            "$ref": "#/components/schemas/AgentValuationOverrides"
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "includeDistribution": {
+                "type": "boolean",
+                "default": false
+              }
+            }
+          }
+        },
+        "required": [
+          "symbol"
+        ]
       }
     },
+    "parameters": {}
+  },
+  "paths": {
     "/v1/valuation": {
       "post": {
         "parameters": [
           {
-            "in": "header",
-            "name": "x-agent-key",
-            "required": true,
             "schema": {
-              "type": "string"
-            }
+              "type": "string",
+              "description": "Agent authentication key"
+            },
+            "required": false,
+            "name": "x-agent-key",
+            "in": "header"
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValuationRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Successful response"
+            "description": "Aggregated valuation response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValuationResponse"
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request"
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Symbol not found"
+            "description": "Symbol not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "422": {
-            "description": "Invalid override values"
+            "description": "Unprocessable entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "500": {
-            "description": "Internal error"
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Health check",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "service": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "service"
+                  ]
+                }
+              }
+            }
           }
         }
       }
     }
-  }
+  },
+  "webhooks": {}
 }

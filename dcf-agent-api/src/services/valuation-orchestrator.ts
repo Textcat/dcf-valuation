@@ -13,7 +13,7 @@ import {
     type DCFResult,
     type MarketImplied,
     type WACCInputs
-} from '@dcf/core'
+} from '@textcat/dcf-core'
 import { HttpError } from '../errors'
 
 const API_VERSION = 'v1'
