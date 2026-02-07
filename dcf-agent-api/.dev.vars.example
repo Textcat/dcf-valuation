@@ -1,5 +1,4 @@
-# Cloudflare Pages Functions local env
 FMP_API_KEY=your_fmp_api_key_here
-# Optional: keys for standalone agent API project
 AGENT_API_KEYS=agent_key_1,agent_key_2
+# fallback when AGENT_API_KEYS is not set
 AGENT_API_KEY=single_agent_key

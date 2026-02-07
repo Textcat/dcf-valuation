@@ -86,6 +86,8 @@ FMP_API_KEY=你的_fmp_api_key npm run valuation -- AAPL --iterations 3000
 ## 目录结构
 ```
 functions/            # Cloudflare Pages Functions (FMP 代理)
+packages/dcf-core/    # 可复用估值核心包（供独立后端复用）
+dcf-agent-api/        # 独立 Worker 后端（聚合估值 API）
 scripts/              # CLI 估值脚本
 src/
   components/         # UI 组件
@@ -103,6 +105,12 @@ src/
 - `npm run lint`：代码检查
 - `npm run test`：单元测试
 - `npm run valuation -- <TICKERS>`：命令行估值
+
+## 独立后端项目（Agent API）
+- 路径：`dcf-agent-api`
+- 核心复用包：`packages/dcf-core`（`@dcf/core`，版本 `0.1.0`）
+- API：`POST /v1/valuation`、`GET /healthz`、`GET /openapi.json`、`GET /openapi.yaml`
+- 文档：`dcf-agent-api/docs/AI_AGENT_API.md`
 
 ## 说明
 - 本项目默认通过 `/api/fmp` 访问 FMP（由 Cloudflare Functions 代理转发）。

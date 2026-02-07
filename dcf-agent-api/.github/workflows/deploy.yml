@@ -1,0 +1,67 @@
+name: Deploy DCF Agent API
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            dcf-agent-api/package-lock.json
+            packages/dcf-core/package-lock.json
+
+      - name: Install dcf-core dependencies
+        working-directory: packages/dcf-core
+        run: npm ci
+
+      - name: Build dcf-core
+        working-directory: packages/dcf-core
+        run: npm run build
+
+      - name: Install API dependencies
+        working-directory: dcf-agent-api
+        run: npm ci
+
+      - name: Run tests
+        working-directory: dcf-agent-api
+        run: npm test
+
+      - name: Build API
+        working-directory: dcf-agent-api
+        run: npm run build
+
+      - name: Generate OpenAPI artifacts
+        working-directory: dcf-agent-api
+        run: npm run openapi:generate
+
+      - name: Upload OpenAPI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi
+          path: |
+            dcf-agent-api/openapi/openapi.yaml
+            dcf-agent-api/openapi/openapi.json
+
+      - name: Deploy Worker
+        working-directory: dcf-agent-api
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          AGENT_API_KEYS: ${{ secrets.AGENT_API_KEYS }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}

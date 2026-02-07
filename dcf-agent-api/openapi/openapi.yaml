@@ -1,0 +1,193 @@
+openapi: 3.1.0
+info:
+  title: DCF Agent API
+  version: 1.0.0
+  description: Aggregated DCF valuation API for AI agents.
+servers:
+  - url: https://dcf-agent-api.example.com
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  service:
+                    type: string
+                required: [ok, service]
+  /v1/valuation:
+    post:
+      summary: Run aggregated valuation
+      description: Returns DCF outputs for perpetuity, roic-driven and fade methods, Layer B/C validation, and Monte Carlo summaries.
+      parameters:
+        - in: header
+          name: x-agent-key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValuationRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValuationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Symbol not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid override values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    DriverOverride:
+      type: object
+      properties:
+        year:
+          type: integer
+          enum: [1, 2, 3, 4, 5]
+        revenueGrowth:
+          type: number
+        operatingMargin:
+          type: number
+        taxRate:
+          type: number
+        daPercent:
+          type: number
+        capexPercent:
+          type: number
+        wcChangePercent:
+          type: number
+        grossMargin:
+          type: number
+      required: [year]
+    DCFOverrides:
+      type: object
+      properties:
+        wacc:
+          type: number
+        terminalGrowthRate:
+          type: number
+        steadyStateROIC:
+          type: number
+        fadeYears:
+          type: integer
+        fadeStartGrowth:
+          type: number
+        fadeStartROIC:
+          type: number
+        explicitPeriodYears:
+          type: integer
+          minimum: 1
+          maximum: 5
+        baseRevenue:
+          type: number
+        baseNetIncome:
+          type: number
+        drivers:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriverOverride'
+    MonteCarloOverrides:
+      type: object
+      properties:
+        iterations:
+          type: integer
+          minimum: 1
+        params:
+          type: object
+          additionalProperties: true
+    AgentValuationOverrides:
+      type: object
+      properties:
+        dcf:
+          $ref: '#/components/schemas/DCFOverrides'
+        monteCarlo:
+          $ref: '#/components/schemas/MonteCarloOverrides'
+    ValuationRequest:
+      type: object
+      properties:
+        symbol:
+          type: string
+        overrides:
+          $ref: '#/components/schemas/AgentValuationOverrides'
+        options:
+          type: object
+          properties:
+            includeDistribution:
+              type: boolean
+              default: false
+      required: [symbol]
+    ValuationResponse:
+      type: object
+      properties:
+        meta:
+          type: object
+          additionalProperties: true
+        effectiveInputs:
+          type: object
+          additionalProperties: true
+        results:
+          type: object
+          additionalProperties: true
+        validation:
+          type: object
+          additionalProperties: true
+        warnings:
+          type: array
+          items:
+            type: string
+      required: [meta, effectiveInputs, results, validation, warnings]
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            requestId:
+              type: string
+            details:
+              nullable: true
+          required: [code, message, requestId]
+      required: [error]
